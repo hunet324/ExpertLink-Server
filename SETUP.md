@@ -95,7 +95,7 @@ redis-cli ping
 
 ### API 테스트
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:5700/health
 # 응답: {"status":"OK","timestamp":"..."}
 ```
 

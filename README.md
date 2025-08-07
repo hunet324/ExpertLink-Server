@@ -68,7 +68,7 @@
     프로젝트 루트에 `.env` 파일을 생성하고 아래 내용을 참고하여 작성합니다.
     ```env
     # Server
-    PORT=3000
+    PORT=5700
 
     # Database (PostgreSQL)
     DATABASE_HOST=localhost
@@ -114,7 +114,7 @@
     npm run build
     npm run start:prod
     ```
-    서버가 정상적으로 실행되면 콘솔에 `ExpertLink Server running on http://localhost:3000` 메시지가 출력됩니다.
+    서버가 정상적으로 실행되면 콘솔에 `ExpertLink Server running on http://localhost:5700` 메시지가 출력됩니다.
 
 ---
 

@@ -18,7 +18,7 @@ Socket.IO 대신 순수 RabbitMQ STOMP 프로토콜을 사용하여 더 표준�
 먼저 NestJS 서버에 연결 정보를 요청합니다:
 
 ```javascript
-POST http://localhost:3000/chat-ws/connect
+POST http://localhost:5700/chat-ws/connect
 Headers: {
   "Authorization": "Bearer <JWT_TOKEN>",
   "Content-Type": "application/json"
@@ -144,7 +144,7 @@ const connectToChat = async (connectionInfo) => {
 ```javascript
 // 메시지 전송
 const sendMessage = async (roomId, content) => {
-  const response = await fetch('http://localhost:3000/chat-ws/send-message', {
+  const response = await fetch('http://localhost:5700/chat-ws/send-message', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + jwtToken,
@@ -169,7 +169,7 @@ const sendMessage = async (roomId, content) => {
 ```javascript
 // 타이핑 시작
 const startTyping = async (roomId) => {
-  await fetch('http://localhost:3000/chat-ws/typing-start', {
+  await fetch('http://localhost:5700/chat-ws/typing-start', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + jwtToken,
@@ -181,7 +181,7 @@ const startTyping = async (roomId) => {
 
 // 타이핑 종료
 const endTyping = async (roomId) => {
-  await fetch('http://localhost:3000/chat-ws/typing-end', {
+  await fetch('http://localhost:5700/chat-ws/typing-end', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + jwtToken,
@@ -197,7 +197,7 @@ const endTyping = async (roomId) => {
 ```javascript
 // 방 참여
 const joinRoom = async (roomId) => {
-  const response = await fetch('http://localhost:3000/chat-ws/join-room', {
+  const response = await fetch('http://localhost:5700/chat-ws/join-room', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + jwtToken,
@@ -219,7 +219,7 @@ const joinRoom = async (roomId) => {
 
 // 방 나가기
 const leaveRoom = async (roomId) => {
-  await fetch(`http://localhost:3000/chat-ws/leave-room/${roomId}`, {
+  await fetch(`http://localhost:5700/chat-ws/leave-room/${roomId}`, {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + jwtToken
@@ -283,7 +283,7 @@ STOMP 구독을 통해 받는 메시지의 종류:
 // 앱 종료 시 연결 정리
 const disconnectChat = async () => {
   // 1. 서버에 연결 해제 알림
-  await fetch('http://localhost:3000/chat-ws/disconnect', {
+  await fetch('http://localhost:5700/chat-ws/disconnect', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + jwtToken
