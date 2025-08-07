@@ -11,6 +11,9 @@ import { SchedulesModule } from './schedules/schedules.module';
 import { CounselingsModule } from './counselings/counselings.module';
 import { ChatModule } from './chat/chat.module';
 import { ContentsModule } from './contents/contents.module';
+import { PsychTestsModule } from './psych-tests/psych-tests.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { AdminModule } from './admin/admin.module';
 import { RabbitMQService } from './common/rabbitmq/rabbitmq.service';
 
 @Module({
@@ -36,6 +39,9 @@ import { RabbitMQService } from './common/rabbitmq/rabbitmq.service';
     CounselingsModule,
     ChatModule,
     ContentsModule,
+    PsychTestsModule,
+    NotificationsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisService, RabbitMQService],

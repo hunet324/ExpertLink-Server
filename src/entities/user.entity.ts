@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany, OneToOne } from 'typeorm';
 import { Exclude } from 'class-transformer';
 
 export enum UserType {
@@ -60,4 +60,8 @@ export class User {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  // Relations
+  @OneToOne('ExpertProfile', 'user')
+  expertProfile?: any;
 }

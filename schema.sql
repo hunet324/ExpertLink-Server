@@ -61,6 +61,20 @@ CREATE TABLE psych_answers (
     UNIQUE(user_id, question_id) -- 한 사용자는 같은 문항에 하나의 답변만
 );
 
+-- 설문 결과 테이블
+CREATE TABLE psych_results (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    test_id INTEGER REFERENCES psych_tests(id) ON DELETE CASCADE,
+    total_score INTEGER,
+    result_type VARCHAR(100), -- MBTI 결과, 등급 등
+    result_description TEXT,
+    result_details JSONB, -- 상세 결과 데이터
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(user_id, test_id) -- 한 사용자는 같은 설문에 하나의 결과만 (재검사 시 업데이트)
+);
+
 -- 전문가 프로필 테이블 (users 테이블 확장)
 CREATE TABLE expert_profiles (
     id SERIAL PRIMARY KEY,
