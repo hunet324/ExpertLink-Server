@@ -10,7 +10,6 @@ export class RedisService {
     this.client = new Redis({
       host: this.configService.get('REDIS_HOST', 'localhost'),
       port: this.configService.get('REDIS_PORT', 6379),
-      retryDelayOnFailover: 100,
       maxRetriesPerRequest: 3,
     });
 
@@ -64,6 +63,10 @@ export class RedisService {
   }
 
   async setMembers(key: string): Promise<string[]> {
+    return await this.client.smembers(key);
+  }
+
+  async setGetAll(key: string): Promise<string[]> {
     return await this.client.smembers(key);
   }
 }

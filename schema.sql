@@ -22,7 +22,9 @@ CREATE TYPE user_type_enum AS ENUM ('general', 'expert', 'admin');
 CREATE TYPE user_status_enum AS ENUM ('pending', 'active', 'inactive', 'withdrawn');
 CREATE TYPE schedule_status_enum AS ENUM ('available', 'booked', 'completed', 'cancelled');
 CREATE TYPE counseling_status_enum AS ENUM ('pending', 'approved', 'rejected', 'completed', 'cancelled');
-CREATE TYPE content_type_enum AS ENUM ('psychology_info', 'self_healing', 'journal', 'activity');
+CREATE TYPE content_type_enum AS ENUM ('article', 'video', 'audio', 'infographic', 'quiz', 'meditation', 'exercise');
+CREATE TYPE content_status_enum AS ENUM ('draft', 'published', 'archived');
+CREATE TYPE content_category_enum AS ENUM ('depression', 'anxiety', 'stress', 'relationship', 'self_esteem', 'sleep', 'addiction', 'trauma', 'parenting', 'workplace', 'general');
 
 -- 심리 설문 테이블
 CREATE TABLE psych_tests (
@@ -113,32 +115,50 @@ CREATE TABLE counselings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 콘텐츠 테이블
+-- 심리 콘텐츠 테이블
 CREATE TABLE contents (
     id SERIAL PRIMARY KEY,
-    title VARCHAR(300) NOT NULL,
-    description TEXT,
-    content_body TEXT, -- 실제 콘텐츠 내용
-    type content_type_enum NOT NULL,
-    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    title VARCHAR(255) NOT NULL,
+    summary TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_type content_type_enum NOT NULL DEFAULT 'article',
+    category content_category_enum NOT NULL DEFAULT 'general',
+    status content_status_enum NOT NULL DEFAULT 'draft',
     thumbnail_url VARCHAR(500),
-    tags VARCHAR(50)[],
-    is_published BOOLEAN DEFAULT false,
+    media_url VARCHAR(500), -- 비디오, 오디오, 이미지 URL
+    tags JSONB, -- 태그 배열
+    reading_time INTEGER DEFAULT 0, -- 예상 읽기 시간 (분)
     view_count INTEGER DEFAULT 0,
     like_count INTEGER DEFAULT 0,
+    bookmark_count INTEGER DEFAULT 0,
+    author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    author_name VARCHAR(255),
+    metadata JSONB, -- 추가 메타데이터
+    is_featured BOOLEAN DEFAULT false,
+    is_premium BOOLEAN DEFAULT false,
+    published_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 사용자 콘텐츠 상호작용 (좋아요, 북마크 등)
-CREATE TABLE user_content_interactions (
+-- 콘텐츠 좋아요 테이블
+CREATE TABLE content_likes (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     content_id INTEGER REFERENCES contents(id) ON DELETE CASCADE,
-    interaction_type VARCHAR(20) NOT NULL, -- 'like', 'bookmark', 'view'
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    UNIQUE(user_id, content_id, interaction_type)
+    UNIQUE(content_id, user_id)
+);
+
+-- 콘텐츠 북마크 테이블
+CREATE TABLE content_bookmarks (
+    id SERIAL PRIMARY KEY,
+    content_id INTEGER REFERENCES contents(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(content_id, user_id)
 );
 
 -- 알림 테이블

@@ -4,6 +4,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { RedisService } from './config/redis.config';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { ExpertsModule } from './experts/experts.module';
+import { SchedulesModule } from './schedules/schedules.module';
+import { CounselingsModule } from './counselings/counselings.module';
+import { ChatModule } from './chat/chat.module';
+import { ContentsModule } from './contents/contents.module';
+import { RabbitMQService } from './common/rabbitmq/rabbitmq.service';
 
 @Module({
   imports: [
@@ -18,11 +26,18 @@ import { RedisService } from './config/redis.config';
       username: process.env.DATABASE_USERNAME,
       password: process.env.DATABASE_PASSWORD,
       database: process.env.DATABASE_NAME,
-      autoLoadEntities: true,
+      entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: process.env.NODE_ENV === 'development',
     }),
+    AuthModule,
+    UsersModule,
+    ExpertsModule,
+    SchedulesModule,
+    CounselingsModule,
+    ChatModule,
+    ContentsModule,
   ],
   controllers: [AppController],
-  providers: [AppService, RedisService],
+  providers: [AppService, RedisService, RabbitMQService],
 })
 export class AppModule {}
