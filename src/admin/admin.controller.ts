@@ -20,6 +20,8 @@ import { AdminDashboardStatsDto } from './dto/admin-stats.dto';
 import { AdminUserQueryDto, AdminUserListResponseDto, UserStatusUpdateDto, UserStatusUpdateResponseDto } from './dto/admin-user-management.dto';
 import { ExpertVerificationDto, ExpertVerificationResponseDto, PendingExpertsListDto } from './dto/expert-verification.dto';
 
+import { CreateInitialAdminDto } from './dto/create-initial-admin.dto';
+
 interface RequestWithUser {
   user: {
     userId: number;
@@ -30,10 +32,16 @@ interface RequestWithUser {
 
 @ApiTags('⚙️ admin')
 @Controller('admin')
-@UseGuards(JwtAuthGuard, AdminGuard) // JWT 인증 + 관리자 권한 필요
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
+  @Post('initial-admin')
+  @HttpCode(HttpStatus.CREATED)
+  async createInitialAdmin(@Body() createDto: CreateInitialAdminDto): Promise<any> {
+    return await this.adminService.createInitialAdmin(createDto);
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard) // JWT 인증 + 관리자 권한 필요
   @Get('stats')
   async getDashboardStats(): Promise<AdminDashboardStatsDto> {
     return await this.adminService.getDashboardStats();

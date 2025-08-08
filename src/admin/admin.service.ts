@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, SelectQueryBuilder } from 'typeorm';
 import { User, UserType, UserStatus } from '../entities/user.entity';
@@ -15,6 +15,8 @@ import { ExpertVerificationDto, ExpertVerificationResponseDto, PendingExpertsLis
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../entities/notification.entity';
 import { plainToClass } from 'class-transformer';
+import { UsersService } from '../users/users.service';
+import { CreateInitialAdminDto } from './dto/create-initial-admin.dto';
 
 @Injectable()
 export class AdminService {
@@ -37,8 +39,40 @@ export class AdminService {
     private chatMessageRepository: Repository<ChatMessage>,
     private dataSource: DataSource,
     private notificationsService: NotificationsService,
+    private usersService: UsersService,
   ) {}
 
+  async createInitialAdmin(createDto: CreateInitialAdminDto): Promise<User> {
+    // 이미 관리자 계정이 존재하는지 확인
+    const existingAdmin = await this.userRepository.findOne({
+      where: { user_type: UserType.ADMIN },
+    });
+
+    if (existingAdmin) {
+      throw new ConflictException('이미 관리자 계정이 존재합니다.');
+    }
+
+    // 이메일 중복 확인 (일반 사용자 포함)
+    const existingUser = await this.userRepository.findOne({
+      where: { email: createDto.email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('해당 이메일로 이미 계정이 존재합니다.');
+    }
+
+    // 관리자 계정 생성
+    const adminUser = await this.usersService.create({
+      email: createDto.email,
+      password: createDto.password,
+      name: createDto.name,
+      phone: createDto.phone,
+      user_type: UserType.ADMIN,
+    });
+
+    return adminUser;
+  }
+  
   async getDashboardStats(): Promise<AdminDashboardStatsDto> {
     const [
       userStats,

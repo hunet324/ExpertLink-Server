@@ -13,6 +13,7 @@ import { ChatMessage } from '../entities/chat-message.entity';
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       inject: [ConfigService],
     }),
     NotificationsModule, // 알림 서비스 사용을 위해 import
+    UsersModule, // UsersService 사용을 위해 import
   ],
   providers: [AdminService],
   controllers: [AdminController],
