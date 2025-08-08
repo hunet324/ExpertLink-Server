@@ -283,7 +283,7 @@ STOMP 구독을 통해 받는 메시지의 종류:
 // 앱 종료 시 연결 정리
 const disconnectChat = async () => {
   // 1. 서버에 연결 해제 알림
-  await fetch('http://localhost:5700/chat-ws/disconnect', {
+  await fetch('${SERVER_BASE_URL}/chat-ws/disconnect', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + jwtToken

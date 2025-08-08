@@ -57,15 +57,20 @@ else
     echo "ℹ️  실행 중인 Node.js 프로세스가 없습니다."
 fi
 
+# .env 파일에서 PORT 변수 읽기
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+fi
+
 # 포트 확인 및 정리
-echo "🔍 포트 5700 상태 확인 중..."
-PORT_PID=$(lsof -ti:5700 2>/dev/null)
+echo "🔍 포트 ${PORT} 상태 확인 중..."
+PORT_PID=$(lsof -ti:${PORT} 2>/dev/null)
 if [ -n "$PORT_PID" ]; then
-    echo "🛑 포트 5700 사용 프로세스 종료 중... (PID: $PORT_PID)"
+    echo "🛑 포트 ${PORT} 사용 프로세스 종료 중... (PID: $PORT_PID)"
     kill -9 $PORT_PID 2>/dev/null
     echo "✅ 포트 정리 완료"
 else
-    echo "ℹ️  포트 5700이 비어있습니다."
+    echo "ℹ️  포트 ${PORT}이 비어있습니다."
 fi
 
 # Docker 서비스 종료 옵션

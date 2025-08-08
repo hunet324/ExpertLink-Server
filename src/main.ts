@@ -5,11 +5,16 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
+import { ConfigService } from '@nestjs/config';
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   
+  const configService = app.get(ConfigService);
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  
   app.enableCors({
-    origin: ['http://localhost:5700'],
+    origin: corsOrigin ? corsOrigin.split(',') : [],
     credentials: true,
   });
   
@@ -24,8 +29,11 @@ async function bootstrap() {
     prefix: '/uploads/',
   });
 
+  const port = configService.get<string>('PORT');
+  const serverBaseUrl = configService.get<string>('SERVER_BASE_URL');
+
   // Swagger/OpenAPI 설정
-  const config = new DocumentBuilder()
+  const documentBuilder = new DocumentBuilder()
     .setTitle('🧠 ExpertLink API')
     .setDescription(`
 ## 심리 상담 플랫폼 ExpertLink REST API
@@ -40,11 +48,11 @@ async function bootstrap() {
 
 ### 🔑 인증 방법
 Bearer Token을 사용합니다. 로그인 후 받은 access_token을 Authorization 헤더에 포함하세요.
-\`Authorization: Bearer <access_token>\`
+"Authorization: Bearer <access_token>"
 
 ### 🌐 서버 정보
-- **포트**: 5700
-- **환경**: Development
+- **포트**: ${port}
+- **환경**: ${process.env.NODE_ENV}
 - **데이터베이스**: PostgreSQL
 - **캐시**: Redis
 - **메시지 큐**: RabbitMQ
@@ -52,7 +60,6 @@ Bearer Token을 사용합니다. 로그인 후 받은 access_token을 Authorizat
     .setVersion('2.0.0')
     .setContact('ExpertLink Team', 'https://expertlink.com', 'contact@expertlink.com')
     .setLicense('MIT', 'https://opensource.org/licenses/MIT')
-    .addServer('http://localhost:5700', 'Development Server')
     .addBearerAuth(
       {
         type: 'http',
@@ -73,8 +80,15 @@ Bearer Token을 사용합니다. 로그인 후 받은 access_token을 Authorizat
     .addTag('📚 contents', '심리 콘텐츠 API - 교육자료, 아티클, 동영상')
     .addTag('🧠 psych-tests', '심리 검사 API - 다양한 심리 테스트 도구')
     .addTag('🔔 notifications', '알림 관리 API - 푸시 알림, 이메일 알림')
-    .addTag('⚙️ admin', '관리자 API - 시스템 관리, 사용자 관리, 통계')
-    .build();
+    .addTag('⚙️ admin', '관리자 API - 시스템 관리, 사용자 관리, 통계');
+
+  // 환경변수에 서버 URL이 있으면 추가
+  if (serverBaseUrl) {
+    documentBuilder.addServer(serverBaseUrl, 'Production Server');
+  }
+  documentBuilder.addServer(`http://localhost:${port}`, 'Development Server');
+
+  const config = documentBuilder.build();
 
   const document = SwaggerModule.createDocument(app, config);
   
@@ -94,7 +108,6 @@ Bearer Token을 사용합니다. 로그인 후 받은 access_token을 Authorizat
     },
   });
   
-  const port = process.env.PORT || 5700;
   await app.listen(port);
 
   console.log(`ExpertLink Server running on http://localhost:${port}`);

@@ -103,6 +103,12 @@ echo "  pm2 delete expertlink-server"
 echo ""
 echo "========================================"
 echo "✨ 프로덕션 서버가 시작되었습니다!"
-echo "🌐 서버 URL: http://localhost:5700"
-echo "📄 API 문서: http://localhost:5700/api-docs"
+
+# .env 파일에서 PORT 변수 읽기
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+fi
+
+echo "🌐 서버 URL: http://localhost:${PORT}"
+echo "📄 API 문서: http://localhost:${PORT}/api-docs"
 echo "========================================"

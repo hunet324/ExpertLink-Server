@@ -114,7 +114,7 @@
     npm run build
     npm run start:prod
     ```
-    서버가 정상적으로 실행되면 콘솔에 `ExpertLink Server running on http://localhost:5700` 메시지가 출력됩니다.
+    서버가 정상적으로 실행되면 콘솔에 `ExpertLink Server running on http://localhost:${PORT}` 메시지가 출력됩니다.
 
 ---
 

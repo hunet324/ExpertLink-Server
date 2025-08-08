@@ -67,6 +67,6 @@ npm run start:dev
 echo ""
 echo "========================================"
 echo "✨ 서버가 시작되었습니다!"
-echo "📄 Swagger UI: http://localhost:5700/api-docs"
-echo "📚 ReDoc: http://localhost:5700/redoc"
+echo "📄 Swagger UI: http://localhost:${PORT}/api-docs"
+echo "📚 ReDoc: http://localhost:${PORT}/redoc"
 echo "========================================"
