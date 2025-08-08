@@ -28,7 +28,14 @@ export class CounselingConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.setupConsumers();
+    // RabbitMQ 설정 완료 대기
+    setTimeout(async () => {
+      try {
+        await this.setupConsumers();
+      } catch (error) {
+        this.logger.warn('Counseling consumer setup failed, continuing without consumers', error.message);
+      }
+    }, 3000);
   }
 
   private async setupConsumers() {

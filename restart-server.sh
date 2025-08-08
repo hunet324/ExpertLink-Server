@@ -46,13 +46,15 @@ if [ -n "$PORT_PID" ]; then
     sleep 1
 fi
 
-# Docker 컨테이너 상태 확인
-echo "🐳 Docker 컨테이너 상태 확인 중..."
+# Docker 컨테이너 상태 확인 (선택적)
+echo "🐳 Docker 서비스 확인 중..."
 if command -v docker-compose &> /dev/null; then
     if [ -f "docker-compose.yml" ]; then
-        docker-compose ps
-        echo "📦 필요시 Docker 서비스 시작: docker-compose up -d"
+        echo "📦 Docker Compose 파일 존재. 필요시 수동 실행: docker-compose up -d"
+        echo "ℹ️  현재는 로컬 PostgreSQL, Redis, RabbitMQ 사용"
     fi
+else
+    echo "ℹ️  Docker Compose 미설치 - 로컬 서비스 사용"
 fi
 
 echo ""

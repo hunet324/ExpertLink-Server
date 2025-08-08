@@ -1,6 +1,48 @@
 import { Expose, Transform, Type } from 'class-transformer';
 import { CounselingStatus, PaymentStatus } from '../../entities/counseling.entity';
 
+class UserInfoDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  profile_image: string;
+}
+
+class ExpertInfoDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  profile_image: string;
+
+  @Expose()
+  specialization: string[];
+}
+
+class ScheduleInfoDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  schedule_date: Date;
+
+  @Expose()
+  start_time: string;
+
+  @Expose()
+  end_time: string;
+
+  @Expose()
+  title: string;
+}
+
 export class CounselingResponseDto {
   @Expose()
   id: number;
@@ -59,46 +101,4 @@ export class CounselingResponseDto {
   @Expose()
   @Type(() => ScheduleInfoDto)
   schedule: ScheduleInfoDto;
-}
-
-class UserInfoDto {
-  @Expose()
-  id: number;
-
-  @Expose()
-  name: string;
-
-  @Expose()
-  profile_image: string;
-}
-
-class ExpertInfoDto {
-  @Expose()
-  id: number;
-
-  @Expose()
-  name: string;
-
-  @Expose()
-  profile_image: string;
-
-  @Expose()
-  specialization: string[];
-}
-
-class ScheduleInfoDto {
-  @Expose()
-  id: number;
-
-  @Expose()
-  schedule_date: Date;
-
-  @Expose()
-  start_time: string;
-
-  @Expose()
-  end_time: string;
-
-  @Expose()
-  title: string;
 }

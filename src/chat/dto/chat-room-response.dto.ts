@@ -1,6 +1,43 @@
 import { Expose, Transform, Type } from 'class-transformer';
 import { ChatRoomStatus } from '../../entities/chat-room.entity';
 
+class ParticipantDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  profile_image: string;
+
+  @Expose()
+  user_type: string;
+
+  @Expose()
+  is_online: boolean;
+}
+
+class LastMessageDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  sender_id: number;
+
+  @Expose()
+  sender_name: string;
+
+  @Expose()
+  message_type: string;
+
+  @Expose()
+  content: string;
+
+  @Expose()
+  created_at: Date;
+}
+
 export class ChatRoomResponseDto {
   @Expose()
   id: number;
@@ -39,41 +76,4 @@ export class ChatRoomResponseDto {
   // 읽지 않은 메시지 수
   @Expose()
   unread_count: number;
-}
-
-class ParticipantDto {
-  @Expose()
-  id: number;
-
-  @Expose()
-  name: string;
-
-  @Expose()
-  profile_image: string;
-
-  @Expose()
-  user_type: string;
-
-  @Expose()
-  is_online: boolean;
-}
-
-class LastMessageDto {
-  @Expose()
-  id: number;
-
-  @Expose()
-  sender_id: number;
-
-  @Expose()
-  sender_name: string;
-
-  @Expose()
-  message_type: string;
-
-  @Expose()
-  content: string;
-
-  @Expose()
-  created_at: Date;
 }

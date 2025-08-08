@@ -13,8 +13,14 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   constructor(private configService: ConfigService) {}
 
   async onModuleInit() {
-    await this.connect();
-    await this.setupExchangesAndQueues();
+    try {
+      await this.connect();
+      await this.setupExchangesAndQueues();
+      // 큐 설정 완료 후 잠시 대기
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      this.logger.warn('RabbitMQ initialization failed, continuing without RabbitMQ', error.message);
+    }
   }
 
   async onModuleDestroy() {
@@ -61,11 +67,17 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
     } catch (error) {
       this.logger.error('Failed to connect to RabbitMQ', error);
-      throw error;
+      // Don't throw error to allow server to start without RabbitMQ
+      return;
     }
   }
 
   private async setupExchangesAndQueues(): Promise<void> {
+    if (!this.publisherChannel) {
+      this.logger.warn('Publisher channel not available, skipping exchanges and queues setup');
+      return;
+    }
+
     await this.publisherChannel.addSetup(async (channel: amqp.Channel) => {
       // Exchange 생성
       await channel.assertExchange('counseling.events', 'topic', {
@@ -108,6 +120,11 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
   }
 
   async publishEvent(routingKey: string, data: any): Promise<void> {
+    if (!this.publisherChannel) {
+      this.logger.warn('RabbitMQ not connected, skipping event publication');
+      return;
+    }
+
     try {
       const message = {
         ...data,
@@ -129,7 +146,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Event published: ${routingKey}`, { eventId: message.eventId });
     } catch (error) {
       this.logger.error(`Failed to publish event: ${routingKey}`, error);
-      throw error;
+      // Don't throw error to allow application to continue
     }
   }
 
@@ -137,6 +154,11 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     queueName: string,
     handler: (data: any, message: amqp.ConsumeMessage) => Promise<void>,
   ): Promise<void> {
+    if (!this.consumerChannel) {
+      this.logger.warn('RabbitMQ consumer channel not available, skipping subscription');
+      return;
+    }
+
     await this.consumerChannel.addSetup(async (channel: amqp.Channel) => {
       await channel.consume(queueName, async (message) => {
         if (message) {
@@ -164,6 +186,11 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
 
   // STOMP WebSocket용 direct exchange에 메시지 발행
   async publishToExchange(exchange: string, routingKey: string, data: any): Promise<void> {
+    if (!this.publisherChannel) {
+      this.logger.warn('RabbitMQ not connected, skipping message publication');
+      return;
+    }
+
     try {
       const message = {
         ...data,
@@ -188,7 +215,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Message published to exchange: ${exchange}/${routingKey}`, { messageId: message.messageId });
     } catch (error) {
       this.logger.error(`Failed to publish to exchange: ${exchange}/${routingKey}`, error);
-      throw error;
+      // Don't throw error to allow application to continue
     }
   }
 

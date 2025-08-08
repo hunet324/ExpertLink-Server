@@ -1,6 +1,20 @@
 import { Expose, Type } from 'class-transformer';
 import { MessageType } from '../../entities/chat-message.entity';
 
+class SenderDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  profile_image: string;
+
+  @Expose()
+  user_type: string;
+}
+
 export class ChatMessageResponseDto {
   @Expose()
   id: number;
@@ -45,18 +59,4 @@ export class ChatMessageResponseDto {
   @Expose()
   @Type(() => SenderDto)
   sender: SenderDto;
-}
-
-class SenderDto {
-  @Expose()
-  id: number;
-
-  @Expose()
-  name: string;
-
-  @Expose()
-  profile_image: string;
-
-  @Expose()
-  user_type: string;
 }

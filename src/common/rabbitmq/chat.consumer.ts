@@ -29,12 +29,26 @@ export class ChatConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.setupChatConsumers();
+    // RabbitMQ 설정 완료 대기
+    setTimeout(async () => {
+      try {
+        await this.setupChatConsumers();
+      } catch (error) {
+        this.logger.warn('Chat consumer setup failed, continuing without chat consumers', error.message);
+      }
+    }, 3000);
   }
 
   private async setupChatConsumers() {
+    const publisherChannel = this.rabbitmqService.getPublisherChannel();
+    
+    if (!publisherChannel) {
+      this.logger.warn('RabbitMQ publisher channel not available, skipping chat consumer setup');
+      return;
+    }
+
     // 채팅 메시지 처리 큐 설정
-    await this.rabbitmqService.getPublisherChannel().addSetup(async (channel) => {
+    await publisherChannel.addSetup(async (channel) => {
       // 채팅 전용 Exchange와 Queue 생성
       await channel.assertExchange('chat.events', 'topic', { durable: true });
       

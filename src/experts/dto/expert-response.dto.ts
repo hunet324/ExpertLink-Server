@@ -1,6 +1,26 @@
 import { Expose, Transform, Type } from 'class-transformer';
 import { UserType, UserStatus } from '../../entities/user.entity';
 
+class UserDetailDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  profile_image: string;
+
+  @Expose()
+  bio: string;
+
+  @Expose()
+  user_type: UserType;
+
+  @Expose()
+  status: UserStatus;
+}
+
 export class ExpertListResponseDto {
   @Expose()
   id: number;
@@ -76,24 +96,4 @@ export class ExpertDetailResponseDto {
 
   @Expose()
   updated_at: Date;
-}
-
-class UserDetailDto {
-  @Expose()
-  id: number;
-
-  @Expose()
-  name: string;
-
-  @Expose()
-  profile_image: string;
-
-  @Expose()
-  bio: string;
-
-  @Expose()
-  user_type: UserType;
-
-  @Expose()
-  status: UserStatus;
 }
