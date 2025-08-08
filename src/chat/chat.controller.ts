@@ -11,6 +11,7 @@ import {
   HttpStatus,
   ParseIntPipe
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/interfaces/auth.interface';
@@ -18,6 +19,7 @@ import { CreateMessageDto } from './dto/create-message.dto';
 import { ChatRoomResponseDto } from './dto/chat-room-response.dto';
 import { ChatMessageResponseDto } from './dto/chat-message-response.dto';
 
+@ApiTags('💬 chat')
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
 export class ChatController {

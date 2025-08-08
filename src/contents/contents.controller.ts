@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { ContentsService } from './contents.service';
@@ -25,6 +26,7 @@ interface RequestWithUser {
   };
 }
 
+@ApiTags('📚 contents')
 @Controller('contents')
 export class ContentsController {
   constructor(private readonly contentsService: ContentsService) {}

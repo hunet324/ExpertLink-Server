@@ -13,6 +13,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { NotificationsService } from './notifications.service';
 import { NotificationListResponseDto, NotificationStatsDto } from './dto/notification-response.dto';
@@ -27,6 +28,7 @@ interface RequestWithUser {
   };
 }
 
+@ApiTags('🔔 notifications')
 @Controller('notifications')
 @UseGuards(JwtAuthGuard) // 모든 알림 API는 로그인 필수
 export class NotificationsController {

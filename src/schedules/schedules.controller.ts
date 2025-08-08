@@ -12,6 +12,7 @@ import {
   HttpStatus,
   ParseIntPipe
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { SchedulesService } from './schedules.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ExpertGuard } from '../common/guards/expert.guard';
@@ -20,6 +21,7 @@ import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { ScheduleResponseDto } from './dto/schedule-response.dto';
 
+@ApiTags('📅 schedules')
 @Controller('schedules')
 @UseGuards(JwtAuthGuard, ExpertGuard)
 export class SchedulesController {

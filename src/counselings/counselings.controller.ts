@@ -11,6 +11,7 @@ import {
   HttpStatus,
   ParseIntPipe
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { CounselingsService } from './counselings.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/interfaces/auth.interface';
@@ -18,6 +19,7 @@ import { CreateCounselingDto } from './dto/create-counseling.dto';
 import { UpdateCounselingStatusDto } from './dto/update-counseling-status.dto';
 import { CounselingResponseDto } from './dto/counseling-response.dto';
 
+@ApiTags('🗣️ counselings')
 @Controller('counselings')
 @UseGuards(JwtAuthGuard)
 export class CounselingsController {

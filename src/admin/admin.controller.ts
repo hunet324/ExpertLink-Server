@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { AdminService } from './admin.service';
@@ -27,6 +28,7 @@ interface RequestWithUser {
   };
 }
 
+@ApiTags('⚙️ admin')
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard) // JWT 인증 + 관리자 권한 필요
 export class AdminController {
