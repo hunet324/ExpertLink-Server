@@ -4,8 +4,10 @@ import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-
 import { ConfigService } from '@nestjs/config';
+import { TransformRequestInterceptor } from './common/interceptors/transform-request.interceptor';
+import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
+import { CaseTransformPipe } from './common/pipes/case-transform.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -18,11 +20,19 @@ async function bootstrap() {
     credentials: true,
   });
   
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new CaseTransformPipe(), // camelCase → snake_case 변환을 먼저 실행
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    })
+  );
+
+  // 응답 데이터 케이스 변환 (snake_case → camelCase)
+  app.useGlobalInterceptors(
+    new TransformResponseInterceptor(),
+  );
 
   // 정적 파일 서빙 설정 (프로필 이미지 등)
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {

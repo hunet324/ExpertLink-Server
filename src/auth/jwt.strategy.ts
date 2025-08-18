@@ -27,7 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       userId: payload.sub,
       email: payload.email,
-      user_type: payload.user_type,
+      userType: payload.user_type, // DB의 snake_case를 camelCase로 변환
     };
   }
 }

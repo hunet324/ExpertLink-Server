@@ -1,7 +1,7 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../entities/user.entity';
+import { User, UserType, UserStatus } from '../entities/user.entity';
 import * as bcrypt from 'bcryptjs';
 import { RegisterDto } from '../auth/dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -30,11 +30,16 @@ export class UsersService {
     // 비밀번호 해시화
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // 사용자 생성
+    // 사용자 생성 - 전문가만 PENDING, 일반 회원과 관리자는 ACTIVE
+    const userStatus = userData.user_type === UserType.EXPERT 
+      ? UserStatus.PENDING 
+      : UserStatus.ACTIVE;
+
     const user = this.usersRepository.create({
       ...userData,
       email,
       password_hash: hashedPassword,
+      status: userStatus,
     });
 
     return await this.usersRepository.save(user);

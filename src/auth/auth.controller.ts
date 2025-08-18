@@ -60,7 +60,7 @@ export class AuthController {
     }
   })
   @HttpCode(HttpStatus.OK)
-  async refresh(@Body('refresh_token') refreshToken: string): Promise<{ access_token: string; refresh_token: string }> {
+  async refresh(@Body('refresh_token') refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     return await this.authService.refreshTokens(refreshToken);
   }
 }

@@ -15,8 +15,8 @@ export interface JwtPayload {
 
 export interface AuthResponse {
   user: Partial<User>;
-  access_token: string;
-  refresh_token: string;
+  accessToken: string;
+  refreshToken: string;
 }
 
 @Injectable()
@@ -36,7 +36,7 @@ export class AuthService {
     // Refresh token을 Redis에 저장
     await this.redisService.set(
       `refresh_token:${user.id}`,
-      tokens.refresh_token,
+      tokens.refreshToken,
       7 * 24 * 60 * 60 // 7일
     );
 
@@ -44,8 +44,8 @@ export class AuthService {
     
     return {
       user: userWithoutPassword,
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
     };
   }
 
@@ -71,7 +71,7 @@ export class AuthService {
     // Refresh token을 Redis에 저장
     await this.redisService.set(
       `refresh_token:${user.id}`,
-      tokens.refresh_token,
+      tokens.refreshToken,
       7 * 24 * 60 * 60 // 7일
     );
 
@@ -82,8 +82,8 @@ export class AuthService {
     
     return {
       user: userWithoutPassword,
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
     };
   }
 
@@ -95,7 +95,7 @@ export class AuthService {
     await this.redisService.setRemove('online_users', userId.toString());
   }
 
-  async refreshTokens(refreshToken: string): Promise<{ access_token: string; refresh_token: string }> {
+  async refreshTokens(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     try {
       const payload = this.jwtService.verify(refreshToken, {
         secret: this.configService.get('JWT_REFRESH_SECRET'),
@@ -117,7 +117,7 @@ export class AuthService {
       // 새로운 refresh token을 Redis에 저장
       await this.redisService.set(
         `refresh_token:${user.id}`,
-        tokens.refresh_token,
+        tokens.refreshToken,
         7 * 24 * 60 * 60 // 7일
       );
 
@@ -127,14 +127,14 @@ export class AuthService {
     }
   }
 
-  private async generateTokens(user: User): Promise<{ access_token: string; refresh_token: string }> {
+  private async generateTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       user_type: user.user_type,
     };
 
-    const [access_token, refresh_token] = await Promise.all([
+    const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get('JWT_SECRET'),
         expiresIn: '15m',
@@ -145,6 +145,6 @@ export class AuthService {
       }),
     ]);
 
-    return { access_token, refresh_token };
+    return { accessToken, refreshToken };
   }
 }

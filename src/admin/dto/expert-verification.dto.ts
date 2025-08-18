@@ -1,92 +1,74 @@
-import { Expose, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class ExpertVerificationDto {
+  @ApiProperty({
+    description: '전문가 승인 여부',
+    example: true,
+    type: 'boolean'
+  })
   @IsBoolean()
-  is_verified: boolean;
+  isVerified: boolean;
 
+  @ApiProperty({
+    description: '승인/거절 사유 또는 참고사항',
+    example: '관리자에 의한 승인 처리',
+    required: false
+  })
   @IsOptional()
   @IsString()
-  verification_note?: string; // 승인/거절 사유
+  verificationNote?: string; // 승인/거절 사유
 }
 
 export class ExpertVerificationResponseDto {
-  @Expose()
+  @ApiProperty({ description: '처리 결과 메시지', example: '전문가가 승인되었습니다.' })
   message: string;
 
-  @Expose()
+  @ApiProperty({ description: '전문가 프로필 ID', example: 2 })
   expert_id: number;
 
-  @Expose()
+  @ApiProperty({ description: '전문가 이름', example: '김전문가' })
   expert_name: string;
 
-  @Expose()
+  @ApiProperty({ description: '승인 여부', example: true })
   is_verified: boolean;
 
-  @Expose()
+  @ApiProperty({ description: '승인/거절 사유', example: '관리자에 의한 승인 처리', required: false })
   verification_note?: string;
 
-  @Expose()
+  @ApiProperty({ description: '승인/거절 처리 시간', example: '2024-01-15T09:30:00Z' })
   @Type(() => Date)
   verification_date: Date;
 
-  @Expose()
+  @ApiProperty({ description: '승인한 관리자 ID', example: 1 })
   verified_by: number; // 승인한 관리자 ID
 }
 
 export class PendingExpertDto {
-  @Expose()
-  id: number;
-
-  @Expose()
+  id: number | null; // 일반 사용자의 경우 null
   user_id: number;
-
-  @Expose()
   user_name: string;
-
-  @Expose()
   user_email: string;
-
-  @Expose()
-  specialization: string[];
-
-  @Expose()
+  user_type: string; // 사용자 타입 (general, expert, admin)
+  user_status: string; // 사용자 상태 (pending, active, inactive, withdrawn)
+  specialization?: string[];
   license_number?: string;
-
-  @Expose()
   license_type?: string;
-
-  @Expose()
   years_experience?: number;
-
-  @Expose()
   education?: string;
-
-  @Expose()
   career_history?: string;
-
-  @Expose()
   introduction?: string;
-
-  @Expose()
   hourly_rate?: number;
-
-  @Expose()
   @Type(() => Date)
   created_at: Date;
-
-  @Expose()
   verification_documents?: string[]; // 첨부 서류 URL들
+  is_expert_profile: boolean; // 전문가 프로필 여부
 }
 
 export class PendingExpertsListDto {
-  @Expose()
   @Type(() => PendingExpertDto)
   experts: PendingExpertDto[];
-
-  @Expose()
   total: number;
-
-  @Expose()
   pending_count: number;
 }

@@ -192,50 +192,163 @@ export class AdminService {
   }
 
   async getPendingExperts(): Promise<PendingExpertsListDto> {
-    const experts = await this.expertProfileRepository.find({
-      where: { is_verified: false },
-      relations: ['user'],
-      order: { created_at: 'DESC' },
+    // 미검증 전문가 프로필들과 PENDING 상태 전문가 사용자들 조회
+    const [pendingUsers, unverifiedExperts] = await Promise.all([
+      // PENDING 상태의 전문가 사용자들만 조회 (일반 회원과 관리자는 자동 ACTIVE)
+      this.userRepository.find({
+        where: { 
+          status: UserStatus.PENDING,
+          user_type: UserType.EXPERT // 전문가만 조회 (DB 컬럼명은 user_type)
+        },
+        order: { created_at: 'DESC' },
+      }),
+      // 미검증 전문가 프로필들
+      this.expertProfileRepository.find({
+        where: { is_verified: false },
+        relations: ['user'],
+        order: { created_at: 'DESC' },
+      })
+    ]);
+
+    const pendingList = [];
+
+    // PENDING 상태 전문가 사용자들 추가 (프로필은 없지만 승인 대기 중)
+    pendingUsers.forEach(user => {
+      pendingList.push({
+        id: null, // 전문가 프로필 ID가 없으므로 null
+        user_id: user.id,
+        user_name: user.name,
+        user_email: user.email,
+        user_type: user.user_type,
+        user_status: user.status,
+        specialization: null,
+        license_number: null,
+        license_type: null,
+        years_experience: null,
+        education: null,
+        career_history: null,
+        introduction: null,
+        hourly_rate: null,
+        created_at: user.created_at,
+        verification_documents: [],
+        is_expert_profile: false,
+      });
     });
 
-    const pendingExperts = experts.map(expert => ({
-      id: expert.id,
-      user_id: expert.user_id,
-      user_name: expert.user.name,
-      user_email: expert.user.email,
-      specialization: expert.specialization,
-      license_number: expert.license_number,
-      license_type: expert.license_type,
-      years_experience: expert.years_experience,
-      education: expert.education,
-      career_history: expert.career_history,
-      introduction: expert.introduction,
-      hourly_rate: expert.hourly_rate,
-      created_at: expert.created_at,
-      verification_documents: [], // 실제로는 파일 업로드 시스템과 연동
-    }));
+    // 미검증 전문가들 추가 (프로필은 있지만 검증 대기 중)
+    unverifiedExperts.forEach(expert => {
+      pendingList.push({
+        id: expert.id,
+        user_id: expert.user_id,
+        user_name: expert.user.name,
+        user_email: expert.user.email,
+        user_type: expert.user.user_type,
+        user_status: expert.user.status,
+        specialization: expert.specialization,
+        license_number: expert.license_number,
+        license_type: expert.license_type,
+        years_experience: expert.years_experience,
+        education: expert.education,
+        career_history: expert.career_history,
+        introduction: expert.introduction,
+        hourly_rate: expert.hourly_rate,
+        created_at: expert.created_at,
+        verification_documents: [], // 실제로는 파일 업로드 시스템과 연동
+        is_expert_profile: true,
+      });
+    });
+
+    // 생성일시 기준으로 최신순 정렬
+    pendingList.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     return {
-      experts: pendingExperts,
-      total: experts.length,
-      pending_count: experts.length,
+      experts: pendingList,
+      total: pendingList.length,
+      pending_count: pendingList.length,
     };
   }
 
-  async verifyExpert(expertId: number, verificationDto: ExpertVerificationDto, adminId: number): Promise<ExpertVerificationResponseDto> {
-    const expertProfile = await this.expertProfileRepository.findOne({
-      where: { id: expertId },
-      relations: ['user'],
-    });
+  async verifyExpert(expertId: number, verificationDto: any, adminId: number): Promise<ExpertVerificationResponseDto> {
+    console.log('🔍 Service received expertId:', expertId, 'type:', typeof expertId);
+    console.log('🔍 Service received verificationDto:', JSON.stringify(verificationDto));
+    
+    let expertProfile;
+    
+    if (expertId === null || expertId === 0 || isNaN(expertId)) {
+      // PENDING 사용자의 경우: user_id로 사용자를 찾아 프로필 생성
+      if (!verificationDto.user_id) {
+        throw new NotFoundException('사용자 ID가 필요합니다.');
+      }
+      
+      console.log('🔍 Looking for user with:', {
+        id: verificationDto.user_id,
+        user_type: UserType.EXPERT,
+        status: UserStatus.PENDING
+      });
+      
+      const user = await this.userRepository.findOne({
+        where: { 
+          id: verificationDto.user_id, 
+          user_type: UserType.EXPERT,
+          status: UserStatus.PENDING 
+        }
+      });
+      
+      console.log('🔍 Found user:', user ? 'YES' : 'NO', user);
+      
+      if (!user) {
+        throw new NotFoundException('전문가 사용자를 찾을 수 없습니다.');
+      }
+      
+      // 이미 프로필이 있는지 확인
+      const existingProfile = await this.expertProfileRepository.findOne({
+        where: { user_id: user.id },
+        relations: ['user'],
+      });
+      
+      if (existingProfile) {
+        expertProfile = existingProfile;
+      } else {
+        // 새로운 프로필 생성
+        expertProfile = this.expertProfileRepository.create({
+          user_id: user.id,
+          user,
+          specialization: [],
+          years_experience: 0,
+          hourly_rate: 0,
+          is_verified: verificationDto.is_verified,
+          verification_date: new Date(),
+        });
+        
+        expertProfile = await this.expertProfileRepository.save(expertProfile);
+      }
+    } else {
+      // 기존 프로필이 있는 경우
+      expertProfile = await this.expertProfileRepository.findOne({
+        where: { id: expertId },
+        relations: ['user'],
+      });
 
-    if (!expertProfile) {
-      throw new NotFoundException('전문가 프로필을 찾을 수 없습니다.');
+      if (!expertProfile) {
+        throw new NotFoundException('전문가 프로필을 찾을 수 없습니다.');
+      }
     }
 
+    // 승인/거절 처리
     expertProfile.is_verified = verificationDto.is_verified;
     expertProfile.verification_date = new Date();
 
     await this.expertProfileRepository.save(expertProfile);
+
+    // 승인/거절에 따른 사용자 상태 변경
+    if (verificationDto.is_verified) {
+      // 승인인 경우 ACTIVE로 변경
+      expertProfile.user.status = UserStatus.ACTIVE;
+    } else {
+      // 거절인 경우 INACTIVE로 변경
+      expertProfile.user.status = UserStatus.INACTIVE;
+    }
+    await this.userRepository.save(expertProfile.user);
 
     // 전문가에게 승인/거절 알림 전송
     const message = verificationDto.is_verified
@@ -251,7 +364,7 @@ export class AdminService {
 
     return {
       message: verificationDto.is_verified ? '전문가가 승인되었습니다.' : '전문가 승인이 거절되었습니다.',
-      expert_id: expertId,
+      expert_id: expertProfile.id,
       expert_name: expertProfile.user.name,
       is_verified: verificationDto.is_verified,
       verification_note: verificationDto.verification_note,
