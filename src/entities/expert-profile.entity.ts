@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, OneToMany, ManyToOne } from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('expert_profiles')
@@ -48,4 +48,20 @@ export class ExpertProfile {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  // New fields for organization structure
+  @Column({ nullable: true })
+  center_id: number; // 소속 센터
+
+  @Column({ nullable: true })
+  assigned_manager_id: number; // 담당 관리자
+
+  // New Relations
+  @ManyToOne('Center', 'experts', { nullable: true })
+  @JoinColumn({ name: 'center_id' })
+  center?: any;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'assigned_manager_id' })
+  assignedManager?: User;
 }

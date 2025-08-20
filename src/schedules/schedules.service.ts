@@ -25,7 +25,7 @@ export class SchedulesService {
       throw new NotFoundException('사용자를 찾을 수 없습니다.');
     }
 
-    if (userId !== expertId && user.user_type !== UserType.ADMIN) {
+    if (userId !== expertId && ![UserType.SUPER_ADMIN, UserType.REGIONAL_MANAGER, UserType.CENTER_MANAGER, UserType.STAFF].includes(user.user_type as UserType)) {
       throw new ForbiddenException('권한이 없습니다.');
     }
 

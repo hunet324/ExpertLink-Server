@@ -8,7 +8,7 @@ export class ExpertGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user;
 
-    if (user.userType !== UserType.EXPERT && user.userType !== UserType.ADMIN) {
+    if (user.userType !== UserType.EXPERT && ![UserType.SUPER_ADMIN, UserType.REGIONAL_MANAGER, UserType.CENTER_MANAGER, UserType.STAFF].includes(user.userType as UserType)) {
       throw new ForbiddenException('전문가 권한이 필요합니다.');
     }
 

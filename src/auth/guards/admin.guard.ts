@@ -11,7 +11,7 @@ export class AdminGuard implements CanActivate {
       throw new ForbiddenException('인증이 필요합니다.');
     }
 
-    if (user.userType !== UserType.ADMIN) {
+    if (![UserType.SUPER_ADMIN, UserType.REGIONAL_MANAGER, UserType.CENTER_MANAGER, UserType.STAFF].includes(user.userType as UserType)) {
       throw new ForbiddenException('관리자 권한이 필요합니다.');
     }
 

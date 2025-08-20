@@ -45,7 +45,7 @@ export class AdminService {
   async createInitialAdmin(createDto: CreateInitialAdminDto): Promise<User> {
     // 이미 관리자 계정이 존재하는지 확인
     const existingAdmin = await this.userRepository.findOne({
-      where: { user_type: UserType.ADMIN },
+      where: { user_type: UserType.SUPER_ADMIN },
     });
 
     if (existingAdmin) {
@@ -67,7 +67,7 @@ export class AdminService {
       password: createDto.password,
       name: createDto.name,
       phone: createDto.phone,
-      user_type: UserType.ADMIN,
+      user_type: UserType.SUPER_ADMIN,
     });
 
     return adminUser;
