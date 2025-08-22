@@ -21,6 +21,7 @@ import { AdminUserQueryDto, AdminUserListResponseDto, UserStatusUpdateDto, UserS
 import { ExpertVerificationDto, ExpertVerificationResponseDto, PendingExpertsListDto } from './dto/expert-verification.dto';
 import { AuthenticatedRequest } from '../common/interfaces/auth.interface';
 import { CreateInitialAdminDto } from './dto/create-initial-admin.dto';
+import { LoggerUtil } from '../common/utils/logger.util';
 
 @ApiTags('⚙️ admin')
 @Controller('admin')
@@ -56,6 +57,38 @@ export class AdminController {
   @ApiBearerAuth('JWT-auth')
   async getUsers(@Query() query: AdminUserQueryDto): Promise<AdminUserListResponseDto> {
     return await this.adminService.getUsers(query);
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Get('users/:id')
+  @ApiOperation({ summary: '특정 사용자 조회', description: '관리자가 특정 사용자의 상세 정보를 조회합니다.' })
+  @ApiParam({ name: 'id', description: '사용자 ID', type: 'number' })
+  @ApiResponse({ status: 200, description: '사용자 조회 성공' })
+  @ApiResponse({ status: 401, description: '인증 토큰이 필요합니다.' })
+  @ApiResponse({ status: 403, description: '관리자 권한이 필요합니다.' })
+  @ApiResponse({ status: 404, description: '사용자를 찾을 수 없습니다.' })
+  @ApiBearerAuth('JWT-auth')
+  async getUserById(@Param('id', ParseIntPipe) userId: number): Promise<any> {
+    return await this.adminService.getUserById(userId);
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Put('users/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '사용자 정보 수정', description: '관리자가 사용자의 정보를 수정합니다.' })
+  @ApiParam({ name: 'id', description: '사용자 ID', type: 'number' })
+  @ApiResponse({ status: 200, description: '사용자 정보 수정 성공' })
+  @ApiResponse({ status: 401, description: '인증 토큰이 필요합니다.' })
+  @ApiResponse({ status: 403, description: '관리자 권한이 필요합니다.' })
+  @ApiResponse({ status: 404, description: '사용자를 찾을 수 없습니다.' })
+  @ApiBearerAuth('JWT-auth')
+  async updateUser(
+    @Param('id', ParseIntPipe) userId: number,
+    @Body() updateData: any,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<any> {
+    const adminId = req.user.userId;
+    return await this.adminService.updateUser(userId, updateData, adminId);
   }
 
   @UseGuards(JwtAuthGuard, AdminGuard)
@@ -127,11 +160,14 @@ export class AdminController {
     @Body() body: any, // 일단 any로 받아서 수동 변환
     @Req() req: AuthenticatedRequest,
   ): Promise<ExpertVerificationResponseDto> {
-    console.log('🔍 Controller received body:', JSON.stringify(body));
-    console.log('🔍 Controller received expertId param:', expertIdParam);
-    console.log('🔍 Controller body.user_id:', body.user_id, 'type:', typeof body.user_id);
-    console.log('🔍 Controller body.is_verified:', body.is_verified);
-    console.log('🔍 Controller body.verification_note:', body.verification_note);
+    LoggerUtil.debug('Controller received body', body);
+    LoggerUtil.debug('Controller received expertId param', { expertIdParam });
+    LoggerUtil.debug('Controller body details', {
+      user_id: body.user_id,
+      user_id_type: typeof body.user_id,
+      is_verified: body.is_verified,
+      verification_note: body.verification_note
+    });
     
     // expertId 파라미터 처리 (0이나 null인 경우 처리)
     const expertId = expertIdParam === '0' || expertIdParam === 'null' ? 0 : parseInt(expertIdParam);
@@ -143,8 +179,8 @@ export class AdminController {
       user_id: body.user_id // PENDING 사용자의 경우 필요
     };
     
-    console.log('✅ Controller transformed to:', JSON.stringify(verificationDto));
-    console.log('✅ Controller expertId:', expertId);
+    LoggerUtil.debug('Controller transformed to', verificationDto);
+    LoggerUtil.debug('Controller expertId', { expertId });
     
     const adminId = req.user.userId;
     return await this.adminService.verifyExpert(expertId, verificationDto, adminId);

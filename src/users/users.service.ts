@@ -1,7 +1,8 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { User, UserType, UserStatus } from '../entities/user.entity';
+import { ExpertProfile } from '../entities/expert-profile.entity';
 import * as bcrypt from 'bcryptjs';
 import { RegisterDto } from '../auth/dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -13,6 +14,9 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(ExpertProfile)
+    private expertProfileRepository: Repository<ExpertProfile>,
+    private dataSource: DataSource,
   ) {}
 
   async create(registerDto: RegisterDto): Promise<User> {
@@ -35,14 +39,31 @@ export class UsersService {
       ? UserStatus.PENDING 
       : UserStatus.ACTIVE;
 
-    const user = this.usersRepository.create({
-      ...userData,
-      email,
-      password_hash: hashedPassword,
-      status: userStatus,
-    });
+    // 트랜잭션으로 User와 ExpertProfile 동시 생성
+    return await this.dataSource.transaction(async manager => {
+      const user = manager.create(User, {
+        ...userData,
+        email,
+        password_hash: hashedPassword,
+        status: userStatus,
+      });
 
-    return await this.usersRepository.save(user);
+      const savedUser = await manager.save(User, user);
+
+      // 전문가인 경우 빈 ExpertProfile 생성
+      if (userData.user_type === UserType.EXPERT) {
+        const expertProfile = manager.create(ExpertProfile, {
+          user_id: savedUser.id,
+          specialization: [],
+          is_verified: false,
+          // 다른 필드들은 기본값 또는 null로 설정됨
+        });
+
+        await manager.save(ExpertProfile, expertProfile);
+      }
+
+      return savedUser;
+    });
   }
 
   async findByEmail(email: string): Promise<User | null> {

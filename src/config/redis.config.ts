@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { LoggerUtil } from '../common/utils/logger.util';
 
 @Injectable()
 export class RedisService {
@@ -14,11 +15,11 @@ export class RedisService {
     });
 
     this.client.on('connect', () => {
-      console.log('Redis connected successfully');
+      LoggerUtil.info('Redis connected successfully');
     });
 
     this.client.on('error', (error) => {
-      console.error('Redis connection error:', error);
+      LoggerUtil.error('Redis connection error', error);
     });
   }
 

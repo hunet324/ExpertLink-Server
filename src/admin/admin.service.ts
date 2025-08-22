@@ -17,6 +17,7 @@ import { NotificationType } from '../entities/notification.entity';
 import { plainToClass } from 'class-transformer';
 import { UsersService } from '../users/users.service';
 import { CreateInitialAdminDto } from './dto/create-initial-admin.dto';
+import { LoggerUtil } from '../common/utils/logger.util';
 
 @Injectable()
 export class AdminService {
@@ -269,8 +270,8 @@ export class AdminService {
   }
 
   async verifyExpert(expertId: number, verificationDto: any, adminId: number): Promise<ExpertVerificationResponseDto> {
-    console.log('🔍 Service received expertId:', expertId, 'type:', typeof expertId);
-    console.log('🔍 Service received verificationDto:', JSON.stringify(verificationDto));
+    LoggerUtil.debug('Service received expertId', { expertId, type: typeof expertId });
+    LoggerUtil.debug('Service received verificationDto', verificationDto);
     
     let expertProfile;
     
@@ -280,7 +281,7 @@ export class AdminService {
         throw new NotFoundException('사용자 ID가 필요합니다.');
       }
       
-      console.log('🔍 Looking for user with:', {
+      LoggerUtil.debug('Looking for user with', {
         id: verificationDto.user_id,
         user_type: UserType.EXPERT,
         status: UserStatus.PENDING
@@ -294,7 +295,7 @@ export class AdminService {
         }
       });
       
-      console.log('🔍 Found user:', user ? 'YES' : 'NO', user);
+      LoggerUtil.debug('Found user', { found: user ? 'YES' : 'NO', user });
       
       if (!user) {
         throw new NotFoundException('전문가 사용자를 찾을 수 없습니다.');
@@ -628,5 +629,159 @@ export class AdminService {
         queryBuilder.orderBy('user.created_at', query.sort_order);
         break;
     }
+  }
+
+  /**
+   * 특정 사용자 조회
+   */
+  async getUserById(userId: number): Promise<any> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['expertProfile'],
+      select: [
+        'id', 'name', 'email', 'phone', 'user_type', 'center_id', 
+        'supervisor_id', 'status', 'created_at', 'updated_at'
+      ]
+    });
+
+    if (!user) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다.');
+    }
+
+    const response: any = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      user_type: user.user_type,
+      center_id: user.center_id,
+      supervisor_id: user.supervisor_id,
+      status: user.status,
+      created_at: user.created_at,
+      updated_at: user.updated_at
+    };
+
+    // 전문가인 경우 ExpertProfile 정보 추가
+    if (user.user_type === UserType.EXPERT && user.expertProfile) {
+      response.bio = user.expertProfile.introduction;
+      response.specialties = user.expertProfile.specialization || [];
+      response.yearsExperience = user.expertProfile.years_experience;
+      response.hourlyRate = user.expertProfile.hourly_rate;
+      response.licenseType = user.expertProfile.license_type;
+      response.licenseNumber = user.expertProfile.license_number;
+      response.isVerified = user.expertProfile.is_verified;
+      response.verificationDate = user.expertProfile.verification_date;
+    }
+
+    return response;
+  }
+
+  /**
+   * 사용자 정보 수정
+   */
+  async updateUser(userId: number, updateData: any, adminId: number): Promise<any> {
+    console.log(`🔍 UpdateUser - userId: ${userId}, updateData:`, JSON.stringify(updateData, null, 2));
+    
+    // 트랜잭션 사용하여 데이터 일관성 보장
+    return await this.dataSource.transaction(async manager => {
+      const user = await manager.findOne(User, {
+        where: { id: userId },
+        relations: ['expertProfile']
+      });
+
+      if (!user) {
+        throw new NotFoundException('사용자를 찾을 수 없습니다.');
+      }
+
+      console.log(`🔍 Found user - type: ${user.user_type}, has expertProfile: ${!!user.expertProfile}`);
+
+      // 관리자 권한 확인 로직 (필요시 추가)
+      // TODO: 관리자 레벨에 따른 수정 권한 체크
+
+      // 1. 기본 사용자 정보 업데이트
+      const allowedUserFields = ['name', 'email', 'phone', 'user_type', 'center_id', 'supervisor_id', 'status'];
+      const userUpdateFields: any = {};
+      
+      for (const field of allowedUserFields) {
+        if (updateData[field] !== undefined) {
+          userUpdateFields[field] = updateData[field];
+        }
+      }
+
+      // null 값 처리
+      if (userUpdateFields.center_id === null || userUpdateFields.center_id === undefined) {
+        userUpdateFields.center_id = null;
+      }
+      if (userUpdateFields.supervisor_id === null || userUpdateFields.supervisor_id === undefined) {
+        userUpdateFields.supervisor_id = null;
+      }
+      if (userUpdateFields.phone === null || userUpdateFields.phone === undefined || userUpdateFields.phone === '') {
+        userUpdateFields.phone = null;
+      }
+
+      // 사용자 정보 업데이트
+      if (Object.keys(userUpdateFields).length > 0) {
+        await manager.update(User, userId, userUpdateFields);
+      }
+
+      // 2. 전문가 프로필 정보 업데이트 (전문가인 경우)
+      if (user.user_type === UserType.EXPERT || updateData.user_type === UserType.EXPERT) {
+        console.log(`🔍 Processing expert profile update...`);
+        
+        const expertProfileFields = {
+          introduction: updateData.bio,
+          specialization: updateData.specialties || [],
+          years_experience: updateData.yearsExperience ? Number(updateData.yearsExperience) : undefined,
+          hourly_rate: updateData.hourlyRate ? Number(updateData.hourlyRate) : undefined,
+          license_type: updateData.licenseType,
+          license_number: updateData.licenseNumber,
+          center_id: updateData.centerId || updateData.center_id
+        };
+
+        console.log(`🔍 Expert profile fields before cleaning:`, expertProfileFields);
+
+        // undefined 값과 빈 문자열 제거 (단, 배열은 유지)
+        const cleanedExpertFields = Object.fromEntries(
+          Object.entries(expertProfileFields).filter(([key, value]) => {
+            if (value === undefined) return false;
+            if (key === 'specialization') return true; // 배열은 항상 유지
+            if (typeof value === 'string' && value.trim() === '') return false;
+            return true;
+          })
+        );
+
+        console.log(`🔍 Cleaned expert fields:`, cleanedExpertFields);
+
+        if (Object.keys(cleanedExpertFields).length > 0) {
+          // 기존 ExpertProfile 확인
+          let expertProfile = await manager.findOne(ExpertProfile, {
+            where: { user_id: userId }
+          });
+
+          console.log(`🔍 Existing expert profile found: ${!!expertProfile}`);
+
+          if (expertProfile) {
+            // 기존 프로필 업데이트
+            console.log(`🔍 Updating existing profile with ID: ${expertProfile.id}`);
+            await manager.update(ExpertProfile, expertProfile.id, cleanedExpertFields);
+            console.log(`✅ Expert profile updated successfully`);
+          } else {
+            // 새 프로필 생성
+            console.log(`🔍 Creating new expert profile`);
+            expertProfile = manager.create(ExpertProfile, {
+              user_id: userId,
+              ...cleanedExpertFields
+            });
+            await manager.save(ExpertProfile, expertProfile);
+            console.log(`✅ New expert profile created successfully`);
+          }
+        } else {
+          console.log(`⚠️ No expert fields to update (all undefined)`);
+        }
+      }
+
+      // 업데이트된 사용자 정보 반환
+      return await this.getUserById(userId);
+    });
   }
 }

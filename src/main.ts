@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { TransformRequestInterceptor } from './common/interceptors/transform-request.interceptor';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 import { CaseTransformPipe } from './common/pipes/case-transform.pipe';
+import { LoggerUtil } from './common/utils/logger.util';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -21,7 +22,7 @@ async function bootstrap() {
   });
   
   app.useGlobalPipes(
-    new CaseTransformPipe(), // camelCase → snake_case 변환을 먼저 실행
+    // new CaseTransformPipe(), // 주석 처리: DTO에서 직접 처리
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -29,9 +30,10 @@ async function bootstrap() {
     })
   );
 
-  // 응답 데이터 케이스 변환 (snake_case → camelCase)
+  // 요청/응답 데이터 케이스 변환
   app.useGlobalInterceptors(
-    new TransformResponseInterceptor(),
+    new TransformRequestInterceptor(), // camelCase → snake_case
+    new TransformResponseInterceptor(), // snake_case → camelCase
   );
 
   // 정적 파일 서빙 설정 (프로필 이미지 등)
@@ -42,10 +44,11 @@ async function bootstrap() {
   const port = configService.get<string>('PORT');
   const serverBaseUrl = configService.get<string>('SERVER_BASE_URL');
 
-  // Swagger/OpenAPI 설정
-  const documentBuilder = new DocumentBuilder()
-    .setTitle('🧠 ExpertLink API')
-    .setDescription(`
+  // Swagger/OpenAPI 설정 (환경변수로 제어)
+  if (configService.get<string>('ENABLE_SWAGGER') !== 'false') {
+    const documentBuilder = new DocumentBuilder()
+      .setTitle('🧠 ExpertLink API')
+      .setDescription(`
 ## 심리 상담 플랫폼 ExpertLink REST API
 
 ### 📋 주요 기능
@@ -66,63 +69,68 @@ Bearer Token을 사용합니다. 로그인 후 받은 access_token을 Authorizat
 - **데이터베이스**: PostgreSQL
 - **캐시**: Redis
 - **메시지 큐**: RabbitMQ
-    `)
-    .setVersion('2.0.0')
-    .setContact('ExpertLink Team', 'https://expertlink.com', 'contact@expertlink.com')
-    .setLicense('MIT', 'https://opensource.org/licenses/MIT')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'Authorization',
-        description: '🔑 JWT 토큰을 입력하세요 (Bearer 접두사 없이)',
-        in: 'header',
+      `)
+      .setVersion('2.0.0')
+      .setContact('ExpertLink Team', 'https://expertlink.com', 'contact@expertlink.com')
+      .setLicense('MIT', 'https://opensource.org/licenses/MIT')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          name: 'Authorization',
+          description: '🔑 JWT 토큰을 입력하세요 (Bearer 접두사 없이)',
+          in: 'header',
+        },
+        'JWT-auth',
+      )
+      .addTag('🔐 auth', '인증 관련 API - 회원가입, 로그인, 토큰 관리')
+      .addTag('👤 users', '사용자 관리 API - 프로필, 개인정보 관리')
+      .addTag('👨‍⚕️ experts', '전문가 관련 API - 전문가 프로필, 자격증, 경력 관리')
+      .addTag('📅 schedules', '일정 관리 API - 상담 가능 시간 설정 및 조회')
+      .addTag('🗣️ counselings', '상담 관리 API - 상담 예약, 진행, 완료 처리')
+      .addTag('💬 chat', '채팅 관련 API - 실시간 채팅, 메시지 기록')
+      .addTag('📚 contents', '심리 콘텐츠 API - 교육자료, 아티클, 동영상')
+      .addTag('🧠 psych-tests', '심리 검사 API - 다양한 심리 테스트 도구')
+      .addTag('🔔 notifications', '알림 관리 API - 푸시 알림, 이메일 알림')
+      .addTag('⚙️ admin', '관리자 API - 시스템 관리, 사용자 관리, 통계');
+
+    // 환경변수에 서버 URL이 있으면 추가
+    if (serverBaseUrl) {
+      documentBuilder.addServer(serverBaseUrl, 'Production Server');
+    }
+    documentBuilder.addServer(`http://localhost:${port}`, 'Development Server');
+
+    const config = documentBuilder.build();
+
+    const document = SwaggerModule.createDocument(app, config);
+    
+    // Swagger UI 설정 (기본 경로: /api-docs)
+    SwaggerModule.setup('api-docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
       },
-      'JWT-auth',
-    )
-    .addTag('🔐 auth', '인증 관련 API - 회원가입, 로그인, 토큰 관리')
-    .addTag('👤 users', '사용자 관리 API - 프로필, 개인정보 관리')
-    .addTag('👨‍⚕️ experts', '전문가 관련 API - 전문가 프로필, 자격증, 경력 관리')
-    .addTag('📅 schedules', '일정 관리 API - 상담 가능 시간 설정 및 조회')
-    .addTag('🗣️ counselings', '상담 관리 API - 상담 예약, 진행, 완료 처리')
-    .addTag('💬 chat', '채팅 관련 API - 실시간 채팅, 메시지 기록')
-    .addTag('📚 contents', '심리 콘텐츠 API - 교육자료, 아티클, 동영상')
-    .addTag('🧠 psych-tests', '심리 검사 API - 다양한 심리 테스트 도구')
-    .addTag('🔔 notifications', '알림 관리 API - 푸시 알림, 이메일 알림')
-    .addTag('⚙️ admin', '관리자 API - 시스템 관리, 사용자 관리, 통계');
+    });
 
-  // 환경변수에 서버 URL이 있으면 추가
-  if (serverBaseUrl) {
-    documentBuilder.addServer(serverBaseUrl, 'Production Server');
+    // ReDoc 설정 (경로: /redoc)
+    SwaggerModule.setup('redoc', app, document, {
+      useGlobalPrefix: false,
+      swaggerOptions: {
+        spec: document,
+        theme: 'redoc',
+      },
+    });
   }
-  documentBuilder.addServer(`http://localhost:${port}`, 'Development Server');
-
-  const config = documentBuilder.build();
-
-  const document = SwaggerModule.createDocument(app, config);
-  
-  // Swagger UI 설정 (기본 경로: /api-docs)
-  SwaggerModule.setup('api-docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-  });
-
-  // ReDoc 설정 (경로: /redoc)
-  SwaggerModule.setup('redoc', app, document, {
-    useGlobalPrefix: false,
-    swaggerOptions: {
-      spec: document,
-      theme: 'redoc',
-    },
-  });
   
   await app.listen(port);
 
-  console.log(`ExpertLink Server running on http://localhost:${port}`);
-  console.log(`Swagger UI available at http://localhost:${port}/api-docs`);
-  console.log(`ReDoc available at http://localhost:${port}/redoc`);
-  console.log('RabbitMQ STOMP WebSocket ready on ws://localhost:15674/ws');
+  LoggerUtil.info(`ExpertLink Server running on http://localhost:${port}`);
+  
+  if (configService.get<string>('ENABLE_SWAGGER') !== 'false') {
+    LoggerUtil.info(`Swagger UI available at http://localhost:${port}/api-docs`);
+    LoggerUtil.info(`ReDoc available at http://localhost:${port}/redoc`);
+  }
+  
+  LoggerUtil.info('RabbitMQ STOMP WebSocket ready on ws://localhost:15674/ws');
 }
 bootstrap();

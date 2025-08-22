@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Center } from '../entities/center.entity';
 import { User, UserType } from '../entities/user.entity';
+import { ExpertProfile } from '../entities/expert-profile.entity';
 import { CreateCenterDto } from './dto/create-center.dto';
 import { UpdateCenterDto } from './dto/update-center.dto';
 import { CenterQueryDto } from './dto/center-query.dto';
@@ -16,6 +17,8 @@ export class CentersService {
     private centerRepository: Repository<Center>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(ExpertProfile)
+    private expertProfileRepository: Repository<ExpertProfile>,
   ) {}
 
   async create(createDto: CreateCenterDto): Promise<CenterResponseDto> {
@@ -316,6 +319,113 @@ export class CentersService {
   }
 
   /**
+   * 센터 코드 중복 검사
+   */
+  async checkCenterCode(code: string): Promise<{ available: boolean; message?: string }> {
+    if (!code || typeof code !== 'string') {
+      return { available: false, message: '센터 코드를 입력해주세요.' };
+    }
+
+    // 코드 형식 검증
+    if (!/^[A-Z]{2,4}[0-9]{3,4}$/.test(code)) {
+      return { 
+        available: false, 
+        message: '센터 코드는 영문 대문자 2-4자 + 숫자 3-4자 형식이어야 합니다.' 
+      };
+    }
+
+    // 중복 확인
+    const existingCenter = await this.centerRepository.findOne({
+      where: { code: code.toUpperCase() }
+    });
+
+    if (existingCenter) {
+      return { 
+        available: false, 
+        message: '이미 사용 중인 센터 코드입니다.' 
+      };
+    }
+
+    return { 
+      available: true, 
+      message: '사용 가능한 센터 코드입니다.' 
+    };
+  }
+
+  /**
+   * 센터 직원 목록 조회
+   */
+  async getCenterStaff(centerId: number): Promise<any[]> {
+    const center = await this.centerRepository.findOne({
+      where: { id: centerId }
+    });
+
+    if (!center) {
+      throw new NotFoundException('센터를 찾을 수 없습니다.');
+    }
+
+    const staff = await this.userRepository.find({
+      where: { 
+        center_id: centerId,
+        user_type: UserType.STAFF  // 직원만 조회
+      },
+      select: [
+        'id', 'name', 'email', 'user_type', 'center_id', 
+        'supervisor_id', 'created_at', 'updated_at'
+      ],
+      order: { created_at: 'DESC' }
+    });
+
+    return staff.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      userType: user.user_type,
+      centerId: user.center_id,
+      supervisorId: user.supervisor_id,
+      createdAt: user.created_at
+    }));
+  }
+
+  /**
+   * 센터 전문가 목록 조회
+   */
+  async getCenterExperts(centerId: number): Promise<any[]> {
+    const center = await this.centerRepository.findOne({
+      where: { id: centerId }
+    });
+
+    if (!center) {
+      throw new NotFoundException('센터를 찾을 수 없습니다.');
+    }
+
+    // 전문가 사용자들을 먼저 조회 (ExpertProfile 유무와 관계없이)
+    const experts = await this.userRepository.find({
+      where: { 
+        center_id: centerId,
+        user_type: UserType.EXPERT
+      },
+      relations: ['expertProfile'],
+      order: { created_at: 'DESC' }
+    });
+
+    return experts.map(expert => ({
+      id: expert.id,
+      name: expert.name,
+      email: expert.email,
+      specialties: expert.expertProfile?.specialization || [],
+      status: expert.status,
+      centerId: expert.center_id,
+      isVerified: expert.expertProfile?.is_verified || false,
+      yearsExperience: expert.expertProfile?.years_experience || 0,
+      hourlyRate: expert.expertProfile?.hourly_rate || 0,
+      licenseType: expert.expertProfile?.license_type || '',
+      licenseNumber: expert.expertProfile?.license_number || '',
+      createdAt: expert.created_at
+    }));
+  }
+
+  /**
    * 센터 통계 조회
    */
   async getCenterStatistics(centerId: number): Promise<any> {
@@ -364,6 +474,222 @@ export class CentersService {
         startDate: monthStart,
         endDate: monthEnd
       }
+    };
+  }
+
+  /**
+   * 센터에 직원 배정
+   */
+  async assignStaffToCenter(centerId: number, userId: number): Promise<any> {
+    // 센터 존재 확인
+    const center = await this.centerRepository.findOne({
+      where: { id: centerId }
+    });
+
+    if (!center) {
+      throw new NotFoundException('센터를 찾을 수 없습니다.');
+    }
+
+    // 사용자 존재 확인
+    const user = await this.userRepository.findOne({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다.');
+    }
+
+    // 사용자가 이미 다른 센터에 배정되어 있는지 확인
+    if (user.center_id && user.center_id !== centerId) {
+      throw new ConflictException('이미 다른 센터에 배정된 사용자입니다.');
+    }
+
+    // 사용자가 이미 이 센터의 직원인지 확인
+    if (user.center_id === centerId && user.user_type === UserType.STAFF) {
+      throw new ConflictException('이미 이 센터의 직원으로 배정된 사용자입니다.');
+    }
+
+    // 사용자 정보 업데이트
+    await this.userRepository.update(userId, {
+      center_id: centerId,
+      user_type: UserType.STAFF
+    });
+
+    // 업데이트된 사용자 정보 조회
+    const updatedUser = await this.userRepository.findOne({
+      where: { id: userId }
+    });
+
+    return {
+      success: true,
+      message: '직원이 성공적으로 배정되었습니다.',
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        userType: updatedUser.user_type,
+        centerId: updatedUser.center_id
+      }
+    };
+  }
+
+  /**
+   * 센터에서 직원 배정 해제
+   */
+  async removeStaffFromCenter(centerId: number, userId: number): Promise<any> {
+    // 센터 존재 확인
+    const center = await this.centerRepository.findOne({
+      where: { id: centerId }
+    });
+
+    if (!center) {
+      throw new NotFoundException('센터를 찾을 수 없습니다.');
+    }
+
+    // 사용자 존재 확인
+    const user = await this.userRepository.findOne({
+      where: { id: userId, center_id: centerId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('해당 센터에 배정된 사용자를 찾을 수 없습니다.');
+    }
+
+    // 센터장은 배정 해제할 수 없음
+    if (center.manager_id === userId) {
+      throw new BadRequestException('센터장은 배정을 해제할 수 없습니다.');
+    }
+
+    // 사용자 정보 업데이트 (일반 사용자로 변경)
+    await this.userRepository.update(userId, {
+      center_id: null,
+      user_type: UserType.GENERAL,
+      supervisor_id: null
+    });
+
+    return {
+      success: true,
+      message: '직원 배정이 해제되었습니다.'
+    };
+  }
+
+  /**
+   * 센터에 전문가 배정
+   */
+  async assignExpertToCenter(centerId: number, userId: number): Promise<any> {
+    try {
+      // 센터 존재 확인
+      const center = await this.centerRepository.findOne({
+        where: { id: centerId }
+      });
+
+      if (!center) {
+        throw new NotFoundException('센터를 찾을 수 없습니다.');
+      }
+
+      // 사용자 존재 확인
+      const user = await this.userRepository.findOne({
+        where: { id: userId }
+      });
+
+      if (!user) {
+        throw new NotFoundException('사용자를 찾을 수 없습니다.');
+      }
+
+      // 사용자가 이미 다른 센터에 배정되어 있는지 확인
+      if (user.center_id && user.center_id !== centerId) {
+        throw new ConflictException('이미 다른 센터에 배정된 사용자입니다.');
+      }
+
+      // 사용자가 이미 이 센터의 전문가인지 확인
+      if (user.center_id === centerId && user.user_type === UserType.EXPERT) {
+        throw new ConflictException('이미 이 센터의 전문가로 배정된 사용자입니다.');
+      }
+
+      // ExpertProfile이 있는지 확인하고 없으면 생성
+      let expertProfile = await this.expertProfileRepository.findOne({
+        where: { user: { id: userId } }
+      });
+
+      if (!expertProfile) {
+        // ExpertProfile 생성
+        expertProfile = this.expertProfileRepository.create({
+          user: { id: userId },
+          specialization: [],
+          years_experience: 0,
+          is_verified: false,
+          license_type: '',
+          license_number: '',
+          hourly_rate: 0
+        });
+        await this.expertProfileRepository.save(expertProfile);
+      }
+
+      // 사용자 정보 업데이트 (전문가 타입으로 변경)
+      await this.userRepository.update(userId, {
+        center_id: centerId,
+        user_type: UserType.EXPERT
+      });
+
+      // 업데이트된 사용자 정보 조회
+      const updatedUser = await this.userRepository.findOne({
+        where: { id: userId }
+      });
+
+      if (!updatedUser) {
+        throw new NotFoundException('업데이트된 사용자 정보를 찾을 수 없습니다.');
+      }
+
+      return {
+        success: true,
+        message: '전문가가 성공적으로 배정되었습니다.',
+        user: {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          email: updatedUser.email,
+          userType: updatedUser.user_type,
+          centerId: updatedUser.center_id
+        }
+      };
+    } catch (error) {
+      const { LoggerUtil } = await import('../common/utils/logger.util');
+      LoggerUtil.error('Expert assignment error', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 센터에서 전문가 배정 해제
+   */
+  async removeExpertFromCenter(centerId: number, userId: number): Promise<any> {
+    // 센터 존재 확인
+    const center = await this.centerRepository.findOne({
+      where: { id: centerId }
+    });
+
+    if (!center) {
+      throw new NotFoundException('센터를 찾을 수 없습니다.');
+    }
+
+    // 사용자 존재 확인
+    const user = await this.userRepository.findOne({
+      where: { id: userId, center_id: centerId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('해당 센터에 배정된 전문가를 찾을 수 없습니다.');
+    }
+
+    // 사용자 정보 업데이트 (일반 사용자로 변경)
+    await this.userRepository.update(userId, {
+      center_id: null,
+      user_type: UserType.GENERAL,
+      supervisor_id: null
+    });
+
+    return {
+      success: true,
+      message: '전문가 배정이 해제되었습니다.'
     };
   }
 }
