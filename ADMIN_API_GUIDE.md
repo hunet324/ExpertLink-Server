@@ -193,6 +193,48 @@ GET /admin/experts/pending
 }
 ```
 
+#### 전문가 종합 정보 수정
+
+전문가의 기본 사용자 정보와 프로필 정보를 한 번에 수정합니다.
+
+```http
+PUT /admin/experts/:id/profile
+```
+
+**요청 본문:**
+```json
+{
+  "name": "김전문가",
+  "phone": "010-1234-5678",
+  "status": "active",
+  "centerId": 1,
+  "licenseNumber": "PSY-2023-001234",
+  "licenseType": "상담심리사 1급",
+  "yearsExperience": 5,
+  "hourlyRate": 80000,
+  "specialization": ["우울증", "불안장애", "부부상담"],
+  "introduction": "10년 경력의 전문 상담사입니다.",
+  "education": "서울대학교 심리학과 박사",
+  "careerHistory": "서울대병원 정신건강의학과 5년 근무"
+}
+```
+
+**참고**: 모든 필드는 선택사항(optional)입니다. 제공된 필드만 업데이트됩니다.
+
+**응답 예시:**
+```json
+{
+  "message": "전문가 정보가 성공적으로 업데이트되었습니다.",
+  "expert_id": 234,
+  "expert_name": "김전문가",
+  "updated_fields": {
+    "user_fields": ["name", "phone", "status", "center_id"],
+    "expert_fields": ["license_number", "license_type", "years_experience", "hourly_rate", "specialization", "introduction"]
+  },
+  "updated_at": "2024-01-15T10:30:00Z"
+}
+```
+
 #### 전문가 승인/거절
 
 ```http
@@ -279,6 +321,20 @@ await axios.put('/admin/users/123/status', {
   reason: '이용약관 위반'
 }, config);
 
+// 전문가 종합 정보 수정
+await axios.put('/admin/experts/234/profile', {
+  name: '김전문가',
+  phone: '010-1234-5678',
+  status: 'active',
+  centerId: 1,
+  licenseNumber: 'PSY-2023-001234',
+  licenseType: '상담심리사 1급',
+  yearsExperience: 5,
+  hourlyRate: 80000,
+  specialization: ['우울증', '불안장애', '부부상담'],
+  introduction: '10년 경력의 전문 상담사입니다.'
+}, config);
+
 // 전문가 승인
 await axios.put('/admin/experts/45/verify', {
   is_verified: true,
@@ -302,6 +358,24 @@ curl -X PUT \
      -H "Content-Type: application/json" \
      -d '{"status": "inactive", "reason": "이용약관 위반"}' \
      http://localhost:${PORT}/admin/users/123/status
+
+# 전문가 종합 정보 수정
+curl -X PUT \
+     -H "Authorization: Bearer <jwt_token>" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "name": "김전문가",
+       "phone": "010-1234-5678",
+       "status": "active",
+       "centerId": 1,
+       "licenseNumber": "PSY-2023-001234",
+       "licenseType": "상담심리사 1급",
+       "yearsExperience": 5,
+       "hourlyRate": 80000,
+       "specialization": ["우울증", "불안장애", "부부상담"],
+       "introduction": "10년 경력의 전문 상담사입니다."
+     }' \
+     http://localhost:${PORT}/admin/experts/234/profile
 
 # 전문가 승인
 curl -X PUT \

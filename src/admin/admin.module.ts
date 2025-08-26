@@ -7,9 +7,14 @@ import { ExpertProfile } from '../entities/expert-profile.entity';
 import { Counseling } from '../entities/counseling.entity';
 import { Content } from '../entities/content.entity';
 import { PsychTest } from '../entities/psych-test.entity';
+import { PsychQuestion } from '../entities/psych-question.entity';
 import { PsychResult } from '../entities/psych-result.entity';
+import { LogicRule } from '../entities/logic-rule.entity';
+import { SystemLog } from '../entities/system-log.entity';
+import { Payment } from '../entities/payment.entity';
 import { Notification } from '../entities/notification.entity';
 import { ChatMessage } from '../entities/chat-message.entity';
+import { Schedule } from '../entities/schedule.entity';
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -23,9 +28,14 @@ import { UsersModule } from '../users/users.module';
       Counseling,
       Content,
       PsychTest,
+      PsychQuestion,
       PsychResult,
+      LogicRule,
+      SystemLog,
+      Payment,
       Notification,
       ChatMessage,
+      Schedule,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

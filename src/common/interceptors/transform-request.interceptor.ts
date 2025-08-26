@@ -33,10 +33,10 @@ export class TransformRequestInterceptor implements NestInterceptor {
       });
     }
 
-    // Query parameters도 변환
-    if (request.query && typeof request.query === 'object') {
-      request.query = CaseTransformUtil.transformObjectToSnake(request.query);
-    }
+    // Query parameters는 변환하지 않음 (DTO에서 camelCase로 정의됨)
+    // if (request.query && typeof request.query === 'object') {
+    //   request.query = CaseTransformUtil.transformObjectToSnake(request.query);
+    // }
 
     return next.handle();
   }

@@ -1,0 +1,218 @@
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
+import { Observable, throwError } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { SystemLog, LogLevel, LogCategory } from '../../entities/system-log.entity';
+import { LoggerUtil } from '../utils/logger.util';
+
+@Injectable()
+export class SystemLogInterceptor implements NestInterceptor {
+  constructor(
+    @InjectRepository(SystemLog)
+    private readonly systemLogRepository: Repository<SystemLog>,
+  ) {}
+
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    const request = context.switchToHttp().getRequest();
+    const response = context.switchToHttp().getResponse();
+    const startTime = Date.now();
+    
+    // 요청 정보 추출
+    const method = request.method;
+    const url = request.url;
+    const userAgent = request.headers['user-agent'] || '';
+    const ipAddress = request.ip || request.connection.remoteAddress || 'unknown';
+    const user = request.user; // JWT에서 추출된 사용자 정보
+    
+    // 요청 ID 생성
+    const requestId = this.generateRequestId();
+    request.requestId = requestId;
+
+    return next.handle().pipe(
+      tap(async (data) => {
+        const responseTime = Date.now() - startTime;
+        const statusCode = response.statusCode;
+
+        // 성공적인 요청 로그 기록
+        await this.createSystemLog({
+          level: LogLevel.INFO,
+          category: this.getCategoryFromUrl(url),
+          action: `${method} ${url}`,
+          userId: user?.id,
+          userType: user?.userType,
+          userName: user?.fullName || user?.name,
+          ipAddress,
+          userAgent,
+          details: `API 요청 성공: ${method} ${url}`,
+          requestId,
+          responseTime,
+          statusCode,
+        });
+      }),
+      catchError(async (error) => {
+        const responseTime = Date.now() - startTime;
+        const statusCode = error.status || 500;
+
+        // 에러 요청 로그 기록
+        await this.createSystemLog({
+          level: LogLevel.ERROR,
+          category: this.getCategoryFromUrl(url),
+          action: `${method} ${url}`,
+          userId: user?.id,
+          userType: user?.userType,
+          userName: user?.fullName || user?.name,
+          ipAddress,
+          userAgent,
+          details: `API 요청 실패: ${method} ${url}`,
+          requestId,
+          responseTime,
+          statusCode,
+          errorMessage: error.message,
+          stackTrace: error.stack,
+        });
+
+        return throwError(() => error);
+      }),
+    );
+  }
+
+  private async createSystemLog(logData: Partial<SystemLog>): Promise<void> {
+    try {
+      const systemLog = this.systemLogRepository.create({
+        ...logData,
+        timestamp: new Date(),
+      });
+      
+      await this.systemLogRepository.save(systemLog);
+    } catch (error) {
+      // 로그 저장 실패 시 일반 로그로 기록 (무한 루프 방지)
+      LoggerUtil.error('시스템 로그 저장 실패', error);
+    }
+  }
+
+  private getCategoryFromUrl(url: string): LogCategory {
+    if (url.includes('/auth')) return LogCategory.AUTH;
+    if (url.includes('/payment')) return LogCategory.PAYMENT;
+    if (url.includes('/admin')) return LogCategory.ADMIN;
+    if (url.includes('/expert')) return LogCategory.EXPERT;
+    if (url.includes('/user')) return LogCategory.USER;
+    if (url.includes('/api')) return LogCategory.API;
+    return LogCategory.SYSTEM;
+  }
+
+  private generateRequestId(): string {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    return `req_${timestamp}_${random}`;
+  }
+}
+
+// 시스템 로그 생성을 위한 유틸리티 서비스
+@Injectable()
+export class SystemLogService {
+  constructor(
+    @InjectRepository(SystemLog)
+    private readonly systemLogRepository: Repository<SystemLog>,
+  ) {}
+
+  async createLog(data: {
+    level: LogLevel;
+    category: LogCategory;
+    action: string;
+    details: string;
+    userId?: number;
+    userType?: string;
+    userName?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    requestId?: string;
+    responseTime?: number;
+    statusCode?: number;
+    errorMessage?: string;
+    stackTrace?: string;
+  }): Promise<SystemLog> {
+    try {
+      const systemLog = this.systemLogRepository.create({
+        ...data,
+        timestamp: new Date(),
+        ipAddress: data.ipAddress || 'system',
+      });
+      
+      return await this.systemLogRepository.save(systemLog);
+    } catch (error) {
+      LoggerUtil.error('시스템 로그 생성 실패', error);
+      throw error;
+    }
+  }
+
+  // 특별한 이벤트 로그 메서드들
+  async logUserLogin(userId: number, userName: string, userType: string, ipAddress: string, userAgent: string): Promise<void> {
+    await this.createLog({
+      level: LogLevel.INFO,
+      category: LogCategory.AUTH,
+      action: 'USER_LOGIN',
+      details: `사용자 로그인 성공: ${userName} (${userType})`,
+      userId,
+      userType,
+      userName,
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  async logUserLogout(userId: number, userName: string, userType: string, ipAddress: string): Promise<void> {
+    await this.createLog({
+      level: LogLevel.INFO,
+      category: LogCategory.AUTH,
+      action: 'USER_LOGOUT',
+      details: `사용자 로그아웃: ${userName} (${userType})`,
+      userId,
+      userType,
+      userName,
+      ipAddress,
+    });
+  }
+
+  async logPaymentEvent(action: string, details: string, userId?: number, userName?: string, ipAddress?: string): Promise<void> {
+    await this.createLog({
+      level: LogLevel.INFO,
+      category: LogCategory.PAYMENT,
+      action,
+      details,
+      userId,
+      userName,
+      ipAddress,
+    });
+  }
+
+  async logSystemEvent(level: LogLevel, action: string, details: string, errorMessage?: string): Promise<void> {
+    await this.createLog({
+      level,
+      category: LogCategory.SYSTEM,
+      action,
+      details,
+      errorMessage,
+      ipAddress: 'system',
+      userAgent: 'System Service',
+    });
+  }
+
+  async logAdminAction(action: string, details: string, adminId: number, adminName: string, ipAddress: string): Promise<void> {
+    await this.createLog({
+      level: LogLevel.INFO,
+      category: LogCategory.ADMIN,
+      action,
+      details,
+      userId: adminId,
+      userType: 'admin',
+      userName: adminName,
+      ipAddress,
+    });
+  }
+}
