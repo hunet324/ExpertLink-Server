@@ -22,6 +22,8 @@ export class CaseTransformUtil {
       return obj.map(item => this.transformObjectToSnake(item));
     }
     if (typeof obj !== 'object') return obj;
+    // Date 객체는 그대로 반환 (변환하지 않음)
+    if (obj instanceof Date) return obj;
 
     const transformed: any = {};
     for (const [key, value] of Object.entries(obj)) {
@@ -40,6 +42,8 @@ export class CaseTransformUtil {
       return obj.map(item => this.transformObjectToCamel(item));
     }
     if (typeof obj !== 'object') return obj;
+    // Date 객체는 그대로 반환 (변환하지 않음)
+    if (obj instanceof Date) return obj;
 
     const transformed: any = {};
     for (const [key, value] of Object.entries(obj)) {

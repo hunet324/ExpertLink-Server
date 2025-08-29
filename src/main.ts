@@ -32,7 +32,7 @@ async function bootstrap() {
 
   // 요청/응답 데이터 케이스 변환
   app.useGlobalInterceptors(
-    new TransformRequestInterceptor(), // camelCase → snake_case
+    // new TransformRequestInterceptor(), // camelCase → snake_case (임시 주석처리)
     new TransformResponseInterceptor(), // snake_case → camelCase
   );
 

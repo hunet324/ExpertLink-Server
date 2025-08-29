@@ -17,6 +17,8 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
+import { HybridAdminGuard } from '../auth/guards/hybrid-admin.guard';
+import { RequirePermission, PermissionGuard } from '../common/guards/permission.guard';
 import { AdminService } from './admin.service';
 import { AdminDashboardStatsDto } from './dto/admin-stats.dto';
 import { AdminUserQueryDto, AdminUserListResponseDto, UserStatusUpdateDto, UserStatusUpdateResponseDto, UserUpdateDto, UserUpdateResponseDto } from './dto/admin-user-management.dto';
@@ -805,7 +807,8 @@ export class AdminController {
   // 시스템 로그 관리 API
   // ======================
 
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission('system_view')
   @Get('system/logs')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '시스템 로그 조회', description: '관리자가 시스템 운영 로그를 조회합니다.' })
@@ -817,7 +820,8 @@ export class AdminController {
     return await this.adminService.getSystemLogs(query);
   }
 
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission('system_view')
   @Get('system/logs/stats')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '시스템 로그 통계 조회', description: '관리자가 시스템 로그 통계를 조회합니다.' })
@@ -834,7 +838,8 @@ export class AdminController {
     return await this.adminService.getSystemLogStats(start_date, end_date);
   }
 
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission('system_view')
   @Get('system/logs/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '시스템 로그 상세 조회', description: '관리자가 특정 시스템 로그의 상세 정보를 조회합니다.' })
@@ -848,7 +853,8 @@ export class AdminController {
     return await this.adminService.getSystemLogById(id);
   }
 
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission('system_manage')
   @Delete('system/logs/cleanup')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '오래된 로그 정리', description: '관리자가 지정된 일수보다 오래된 시스템 로그를 삭제합니다.' })
@@ -865,7 +871,8 @@ export class AdminController {
     return await this.adminService.cleanupOldLogs(days, req.user.id, req.user.name, req.ip);
   }
 
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission('system_view')
   @Post('system/logs/export')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '시스템 로그 내보내기', description: '관리자가 시스템 로그를 CSV 형태로 내보냅니다.' })
@@ -880,5 +887,44 @@ export class AdminController {
   ): Promise<{ success: boolean; downloadUrl: string; fileName: string }> {
     LoggerUtil.info(`관리자 ${req.user.name}(${req.user.id})가 시스템 로그 내보내기를 요청했습니다.`);
     return await this.adminService.exportSystemLogs(query, req.user.id, req.user.name, req.ip);
+  }
+
+  // ======================
+  // 사용자 활동 로그 API
+  // ======================
+
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission('system_view')
+  @Get('system/user-activity-logs')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '사용자 활동 로그 조회', description: '관리자가 사용자 활동 로그를 조회합니다.' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: '검색 키워드 (사용자명, 이메일, 액션)' })
+  @ApiQuery({ name: 'user_type', required: false, enum: ['general', 'expert', 'staff', 'center_manager', 'regional_manager', 'super_admin'], description: '사용자 타입 필터' })
+  @ApiQuery({ name: 'action_category', required: false, enum: ['auth', 'profile', 'counseling', 'payment', 'test'], description: '액션 카테고리 필터' })
+  @ApiQuery({ name: 'start_date', required: false, type: String, description: '시작 날짜 (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'end_date', required: false, type: String, description: '종료 날짜 (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: '페이지 번호' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: '페이지당 항목 수' })
+  @ApiResponse({ status: 200, description: '사용자 활동 로그 조회 성공' })
+  @ApiResponse({ status: 401, description: '인증 토큰이 필요합니다.' })
+  @ApiResponse({ status: 403, description: '관리자 권한이 필요합니다.' })
+  @ApiBearerAuth('JWT-auth')
+  async getUserActivityLogs(@Query() query: any): Promise<any> {
+    return await this.adminService.getUserActivityLogs(query);
+  }
+
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @RequirePermission('system_view')
+  @Get('system/user-activity-logs/stats')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '사용자 활동 로그 통계 조회', description: '관리자가 사용자 활동 로그 통계를 조회합니다.' })
+  @ApiQuery({ name: 'start_date', required: false, type: String, description: '시작 날짜 (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'end_date', required: false, type: String, description: '종료 날짜 (YYYY-MM-DD)' })
+  @ApiResponse({ status: 200, description: '사용자 활동 로그 통계 조회 성공' })
+  @ApiResponse({ status: 401, description: '인증 토큰이 필요합니다.' })
+  @ApiResponse({ status: 403, description: '관리자 권한이 필요합니다.' })
+  @ApiBearerAuth('JWT-auth')
+  async getUserActivityLogStats(@Query() query: any): Promise<any> {
+    return await this.adminService.getUserActivityLogStats(query);
   }
 }

@@ -72,7 +72,7 @@ export class CentersService {
       phone: createDto.phone,
       manager_id: createDto.managerId,
       parent_center_id: createDto.parentCenterId,
-      is_active: createDto.isActive ?? true,
+      is_active: createDto.is_active ?? createDto.isActive ?? true,
     });
 
     const savedCenter = await this.centerRepository.save(center);

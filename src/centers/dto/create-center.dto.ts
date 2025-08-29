@@ -38,4 +38,9 @@ export class CreateCenterDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean = true;
+
+  @ApiProperty({ description: '활성 상태 (snake_case)', example: true, required: false })
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }

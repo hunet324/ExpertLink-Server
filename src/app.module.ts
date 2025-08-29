@@ -15,6 +15,7 @@ import { PsychTestsModule } from './psych-tests/psych-tests.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { CentersModule } from './centers/centers.module';
+import { CommonModule } from './common/common.module';
 import { RabbitMQService } from './common/rabbitmq/rabbitmq.service';
 
 @Module({
@@ -44,6 +45,7 @@ import { RabbitMQService } from './common/rabbitmq/rabbitmq.service';
     NotificationsModule,
     AdminModule,
     CentersModule,
+    CommonModule,
   ],
   controllers: [AppController],
   providers: [AppService, RedisService, RabbitMQService],

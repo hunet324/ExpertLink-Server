@@ -1,8 +1,10 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Req, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { AuthService, AuthResponse } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { PasswordInfoResponseDto } from './dto/password-info-response.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/interfaces/auth.interface';
@@ -62,5 +64,33 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async refresh(@Body('refresh_token') refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     return await this.authService.refreshTokens(refreshToken);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: '비밀번호 변경', description: '현재 비밀번호를 확인하고 새 비밀번호로 변경합니다.' })
+  @ApiResponse({ status: 200, description: '비밀번호 변경 성공' })
+  @ApiResponse({ status: 400, description: '잘못된 요청 데이터 (비밀번호 정책 위반)' })
+  @ApiResponse({ status: 401, description: '인증되지 않은 사용자' })
+  @ApiResponse({ status: 409, description: '현재 비밀번호가 올바르지 않음' })
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() changePasswordDto: ChangePasswordDto
+  ): Promise<{ success: boolean; message: string }> {
+    return await this.authService.changePassword(req.user.userId, changePasswordDto);
+  }
+
+  @Get('password-info')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: '비밀번호 정보 조회', description: '현재 사용자의 비밀번호 관련 정보를 조회합니다.' })
+  @ApiResponse({ status: 200, description: '비밀번호 정보 조회 성공', type: PasswordInfoResponseDto })
+  @ApiResponse({ status: 401, description: '인증되지 않은 사용자' })
+  @ApiResponse({ status: 404, description: '사용자를 찾을 수 없음' })
+  @HttpCode(HttpStatus.OK)
+  async getPasswordInfo(@Req() req: AuthenticatedRequest): Promise<PasswordInfoResponseDto> {
+    return await this.authService.getPasswordInfo(req.user.userId);
   }
 }

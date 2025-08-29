@@ -1,10 +1,14 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Inject, Scope } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
 import { UsersService } from '../users/users.service';
 import { RedisService } from '../config/redis.config';
+import { SystemLogService } from '../common/services/system-log.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { User, UserStatus } from '../entities/user.entity';
 
 export interface JwtPayload {
@@ -19,13 +23,15 @@ export interface AuthResponse {
   refreshToken: string;
 }
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
     private redisService: RedisService,
+    private systemLogService: SystemLogService,
+    @Inject(REQUEST) private request: Request,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponse> {
@@ -77,6 +83,21 @@ export class AuthService {
 
     // 로그인 기록을 Redis에 저장 (온라인 상태)
     await this.redisService.setAdd('online_users', user.id.toString());
+
+    // 로그인 시스템 로그 기록
+    const clientIp = this.request.ip || this.request.connection.remoteAddress || 'unknown';
+    const userAgent = this.request.get('User-Agent') || 'unknown';
+    
+    await this.systemLogService.logUserLogin(
+      user.id,
+      user.name,
+      user.user_type,
+      clientIp,
+      userAgent
+    );
+
+    // 로그인 정보 업데이트
+    await this.usersService.updateLoginInfo(user.id);
 
     const { password_hash, ...userWithoutPassword } = user;
     
@@ -146,5 +167,36 @@ export class AuthService {
     ]);
 
     return { accessToken, refreshToken };
+  }
+
+  async changePassword(userId: number, changePasswordDto: ChangePasswordDto): Promise<{ success: boolean; message: string }> {
+    const { currentPassword, newPassword } = changePasswordDto;
+    
+    await this.usersService.changePassword(userId, currentPassword, newPassword);
+
+    // 비밀번호 변경 후 다른 세션 무효화 (보안을 위해)
+    await this.redisService.delete(`refresh_token:${userId}`);
+    
+    // 비밀번호 변경 로그 기록
+    const user = await this.usersService.findById(userId);
+    const clientIp = this.request.ip || this.request.connection.remoteAddress || 'unknown';
+    const userAgent = this.request.get('User-Agent') || 'unknown';
+    
+    await this.systemLogService.logPasswordChange(
+      userId,
+      user.name,
+      user.user_type,
+      clientIp,
+      userAgent
+    );
+
+    return {
+      success: true,
+      message: '비밀번호가 성공적으로 변경되었습니다.'
+    };
+  }
+
+  async getPasswordInfo(userId: number) {
+    return await this.usersService.getPasswordInfo(userId);
   }
 }

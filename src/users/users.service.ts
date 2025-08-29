@@ -131,4 +131,84 @@ export class UsersService {
   async validatePassword(password: string, hashedPassword: string): Promise<boolean> {
     return await bcrypt.compare(password, hashedPassword);
   }
+
+  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다.');
+    }
+
+    // 현재 비밀번호 검증
+    const isCurrentPasswordValid = await this.validatePassword(currentPassword, user.password_hash);
+    if (!isCurrentPasswordValid) {
+      throw new ConflictException('현재 비밀번호가 올바르지 않습니다.');
+    }
+
+    // 새 비밀번호와 현재 비밀번호가 같은지 확인
+    const isSamePassword = await this.validatePassword(newPassword, user.password_hash);
+    if (isSamePassword) {
+      throw new ConflictException('새 비밀번호는 현재 비밀번호와 달라야 합니다.');
+    }
+
+    // 새 비밀번호 해시화
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+    // 비밀번호 업데이트
+    await this.usersRepository.update(userId, {
+      password_hash: hashedNewPassword,
+      last_password_change: new Date(),
+      password_change_required: false,
+      updated_at: new Date()
+    });
+  }
+
+  async getPasswordInfo(userId: number) {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다.');
+    }
+
+    const now = new Date();
+    const lastPasswordChange = user.last_password_change || user.created_at;
+    const daysSinceLastChange = Math.ceil((now.getTime() - lastPasswordChange.getTime()) / (1000 * 60 * 60 * 24));
+    const isPasswordExpiringSoon = daysSinceLastChange > 60; // 60일 이후 경고
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: this.getUserRoleLabel(user.user_type),
+      lastPasswordChange: lastPasswordChange.toISOString(),
+      loginCount: user.login_count || 0,
+      lastLogin: user.last_login?.toISOString(),
+      daysSinceLastChange,
+      isPasswordExpiringSoon
+    };
+  }
+
+  private getUserRoleLabel(userType: UserType): string {
+    const roleLabels = {
+      [UserType.SUPER_ADMIN]: '최고 관리자',
+      [UserType.REGIONAL_MANAGER]: '지역 관리자',
+      [UserType.CENTER_MANAGER]: '센터 관리자',
+      [UserType.STAFF]: '일반 직원',
+      [UserType.EXPERT]: '전문가',
+      [UserType.GENERAL]: '일반 사용자'
+    };
+    return roleLabels[userType] || userType;
+  }
+
+  async updateLoginInfo(userId: number): Promise<void> {
+    await this.usersRepository.update(userId, {
+      last_login: new Date(),
+      login_count: () => 'login_count + 1',
+      login_attempts: 0 // 성공적인 로그인 시 시도 횟수 초기화
+    });
+  }
 }

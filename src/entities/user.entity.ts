@@ -105,4 +105,24 @@ export class User {
 
   @OneToMany(() => User, user => user.supervisor)
   subordinates?: User[];
+
+  // 비밀번호 관련 필드
+  @Column({ type: 'timestamp', nullable: true, default: () => 'CURRENT_TIMESTAMP' })
+  last_password_change?: Date;
+
+  @Column({ type: 'boolean', default: false })
+  password_change_required?: boolean;
+
+  @Column({ type: 'integer', default: 0 })
+  login_attempts?: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  last_login?: Date;
+
+  @Column({ type: 'integer', default: 0 })
+  login_count?: number;
+
+  // 새로운 역할 기반 권한 시스템 관계
+  @OneToMany('UserRole', 'user')
+  user_roles?: any[];
 }

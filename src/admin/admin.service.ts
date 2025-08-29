@@ -92,37 +92,63 @@ export class AdminService {
   }
   
   async getDashboardStats(): Promise<AdminDashboardStatsDto> {
-    const [
-      userStats,
-      expertStats,
-      counselingStats,
-      contentStats,
-      psychTestStats,
-      systemStats,
-    ] = await Promise.all([
-      this.getUserStats(),
-      this.getExpertStats(),
-      this.getCounselingStats(),
-      this.getContentStats(),
-      this.getPsychTestStats(),
-      this.getSystemStats(),
-    ]);
+    try {
+      console.log('🔄 대시보드 통계 조회 시작...');
+      
+      // 각 통계를 개별적으로 처리하여 하나가 실패해도 다른 것들은 가져올 수 있도록 함
+      const [
+        userStats,
+        expertStats,
+        counselingStats,
+        contentStats,
+        psychTestStats,
+        systemStats,
+      ] = await Promise.allSettled([
+        this.getUserStats(),
+        this.getExpertStats(),
+        this.getCounselingStats(),
+        this.getContentStats(),
+        this.getPsychTestStats(),
+        this.getSystemStats(),
+      ]);
 
-    return {
-      users: userStats,
-      experts: expertStats,
-      counselings: counselingStats,
-      contents: contentStats,
-      psych_tests: psychTestStats,
-      system: systemStats,
-      generated_at: new Date(),
-    };
+      console.log('📊 통계 조회 결과:', {
+        users: userStats.status,
+        experts: expertStats.status,
+        counselings: counselingStats.status,
+        contents: contentStats.status,
+        psychTests: psychTestStats.status,
+        system: systemStats.status,
+      });
+
+      // 실패한 통계들을 위한 기본값
+      const defaultUserStats = { total_users: 0, active_users: 0, pending_users: 0, inactive_users: 0, new_users_today: 0, new_users_this_week: 0, new_users_this_month: 0 };
+      const defaultExpertStats = { total_experts: 0, verified_experts: 0, pending_verification: 0, active_experts: 0, average_rating: 0 };
+      const defaultCounselingStats = { total_counselings: 0, completed_counselings: 0, pending_counselings: 0, cancelled_counselings: 0, counselings_today: 0, counselings_this_week: 0, counselings_this_month: 0, average_session_duration: 0 };
+      const defaultContentStats = { total_contents: 0, published_contents: 0, draft_contents: 0, total_views: 0, total_likes: 0, most_viewed_content: null };
+      const defaultPsychTestStats = { total_tests: 0, active_tests: 0, total_responses: 0, responses_today: 0, responses_this_week: 0, responses_this_month: 0, most_popular_test: null };
+      const defaultSystemStats = { total_notifications: 0, unread_notifications: 0, chat_messages_today: 0, login_sessions_today: 0, server_uptime: '0 seconds', database_size: '0 MB' };
+
+      return {
+        users: userStats.status === 'fulfilled' ? userStats.value : defaultUserStats,
+        experts: expertStats.status === 'fulfilled' ? expertStats.value : defaultExpertStats,
+        counselings: counselingStats.status === 'fulfilled' ? counselingStats.value : defaultCounselingStats,
+        contents: contentStats.status === 'fulfilled' ? contentStats.value : defaultContentStats,
+        psych_tests: psychTestStats.status === 'fulfilled' ? psychTestStats.value : defaultPsychTestStats,
+        system: systemStats.status === 'fulfilled' ? systemStats.value : defaultSystemStats,
+        generated_at: new Date(),
+      };
+    } catch (error) {
+      console.error('❌ 대시보드 통계 조회 실패:', error);
+      throw error;
+    }
   }
 
   async getUsers(query: AdminUserQueryDto): Promise<AdminUserListResponseDto> {
-    // 기본 사용자 정보만 먼저 조회 (성능 최적화)
+    // 기본 사용자 정보와 센터 정보 조회
     const baseQueryBuilder = this.userRepository.createQueryBuilder('user')
-      .leftJoinAndSelect('user.expertProfile', 'expert');
+      .leftJoinAndSelect('user.expertProfile', 'expert')
+      .leftJoinAndSelect('user.center', 'center');
 
     // 필터링 적용
     this.applyUserFilters(baseQueryBuilder, query);
@@ -167,7 +193,7 @@ export class AdminService {
       // 통계 데이터를 순차적으로 조회 (연결 과부하 방지)
       const counselingStats = await this.userRepository.query(`
         SELECT 
-          user_id,
+          u.user_id,
           COUNT(DISTINCT c1.id) as user_counseling_count,
           COUNT(DISTINCT CASE WHEN c1.status = 'completed' THEN c1.id END) as user_completed_sessions,
           COUNT(DISTINCT c2.id) as expert_counseling_count,
@@ -175,40 +201,40 @@ export class AdminService {
         FROM (VALUES ${userIds.map((id, idx) => `($${idx + 1}::integer)`).join(',')}) as u(user_id)
         LEFT JOIN counselings c1 ON c1.user_id = u.user_id
         LEFT JOIN counselings c2 ON c2.expert_id = u.user_id
-        GROUP BY user_id
+        GROUP BY u.user_id
       `, userIds);
 
       const paymentStats = await this.userRepository.query(`
-        SELECT user_id, COALESCE(SUM(amount), 0) as total_payments
+        SELECT u.user_id, COALESCE(SUM(amount), 0) as total_payments
         FROM (VALUES ${userIds.map((id, idx) => `($${idx + 1}::integer)`).join(',')}) as u(user_id)
         LEFT JOIN payments p ON p.user_id = u.user_id AND p.status = 'completed'
-        GROUP BY user_id
+        GROUP BY u.user_id
       `, userIds);
 
       const loginStats = await this.userRepository.query(`
         SELECT 
-          user_id, 
+          u.user_id, 
           COUNT(CASE WHEN sl.id IS NOT NULL THEN 1 END) as login_count, 
           MAX(sl.timestamp) as last_login_at
         FROM (VALUES ${userIds.map((id, idx) => `($${idx + 1}::integer)`).join(',')}) as u(user_id)
         LEFT JOIN system_logs sl ON sl.user_id = u.user_id AND sl.action = 'USER_LOGIN'
-        GROUP BY user_id
+        GROUP BY u.user_id
       `, userIds);
 
       // 병렬로 처리할 수 있는 가벼운 쿼리들
       const [contentStats, psychTestStats] = await Promise.all([
         this.userRepository.query(`
-          SELECT user_id, COUNT(CASE WHEN c.id IS NOT NULL THEN 1 END) as content_count
+          SELECT u.user_id, COUNT(CASE WHEN c.id IS NOT NULL THEN 1 END) as content_count
           FROM (VALUES ${userIds.map((id, idx) => `($${idx + 1}::integer)`).join(',')}) as u(user_id)
           LEFT JOIN contents c ON c.author_id = u.user_id
-          GROUP BY user_id
+          GROUP BY u.user_id
         `, userIds),
 
         this.userRepository.query(`
-          SELECT user_id, COUNT(CASE WHEN pr.id IS NOT NULL THEN 1 END) as psych_test_count
+          SELECT u.user_id, COUNT(CASE WHEN pr.id IS NOT NULL THEN 1 END) as psych_test_count
           FROM (VALUES ${userIds.map((id, idx) => `($${idx + 1}::integer)`).join(',')}) as u(user_id)
           LEFT JOIN psych_results pr ON pr.user_id = u.user_id
-          GROUP BY user_id
+          GROUP BY u.user_id
         `, userIds)
       ]);
 
@@ -264,6 +290,11 @@ export class AdminService {
         userDto.email_verified = !!user.email;
         userDto.phone_verified = !!user.phone;
         
+        // 센터 정보 매핑
+        userDto.center_id = user.center_id;
+        userDto.center_name = user.center?.name;
+        userDto.center_code = user.center?.code;
+        
         return userDto;
       });
 
@@ -288,6 +319,11 @@ export class AdminService {
 
       // 기본 통계
       userDto.is_verified = user.expertProfile?.is_verified || false;
+      
+      // 센터 정보 매핑
+      userDto.center_id = user.center_id;
+      userDto.center_name = user.center?.name;
+      userDto.center_code = user.center?.code;
       
       // 안전한 숫자 변환 함수
       const safeParseInt = (value: any, defaultValue: number = 0): number => {
@@ -577,11 +613,11 @@ export class AdminService {
         .getCount(),
       this.userRepository
         .createQueryBuilder('user')
-        .where('user.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)')
+        .where('user.created_at >= NOW() - INTERVAL \'7 days\'')
         .getCount(),
       this.userRepository
         .createQueryBuilder('user')
-        .where('user.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)')
+        .where('user.created_at >= NOW() - INTERVAL \'30 days\'')
         .getCount(),
     ]);
 
@@ -633,11 +669,11 @@ export class AdminService {
         .getCount(),
       this.counselingRepository
         .createQueryBuilder('counseling')
-        .where('counseling.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)')
+        .where('counseling.created_at >= NOW() - INTERVAL \'7 days\'')
         .getCount(),
       this.counselingRepository
         .createQueryBuilder('counseling')
-        .where('counseling.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)')
+        .where('counseling.created_at >= NOW() - INTERVAL \'30 days\'')
         .getCount(),
     ]);
 
@@ -714,11 +750,11 @@ export class AdminService {
         .getCount(),
       this.psychResultRepository
         .createQueryBuilder('result')
-        .where('result.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)')
+        .where('result.completed_at >= NOW() - INTERVAL \'7 days\'')
         .getCount(),
       this.psychResultRepository
         .createQueryBuilder('result')
-        .where('result.completed_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)')
+        .where('result.completed_at >= NOW() - INTERVAL \'30 days\'')
         .getCount(),
     ]);
 
@@ -902,11 +938,15 @@ export class AdminService {
         }
       }
 
-      // null 값 처리
-      if (userUpdateFields.center_id === null || userUpdateFields.center_id === undefined) {
+      // null 값 처리 (NaN 포함)
+      if (userUpdateFields.center_id === null || 
+          userUpdateFields.center_id === undefined || 
+          isNaN(userUpdateFields.center_id)) {
         userUpdateFields.center_id = null;
       }
-      if (userUpdateFields.supervisor_id === null || userUpdateFields.supervisor_id === undefined) {
+      if (userUpdateFields.supervisor_id === null || 
+          userUpdateFields.supervisor_id === undefined || 
+          isNaN(userUpdateFields.supervisor_id)) {
         userUpdateFields.supervisor_id = null;
       }
       if (userUpdateFields.phone === null || userUpdateFields.phone === undefined || userUpdateFields.phone === '') {
@@ -915,7 +955,11 @@ export class AdminService {
 
       // 사용자 정보 업데이트
       if (Object.keys(userUpdateFields).length > 0) {
+        console.log(`🔍 Final userUpdateFields before DB update:`, userUpdateFields);
         await manager.update(User, userId, userUpdateFields);
+        console.log(`✅ User ${userId} updated successfully`);
+      } else {
+        console.log(`⚠️ No user fields to update for user ${userId}`);
       }
 
       // 2. 전문가 프로필 정보 업데이트 (전문가인 경우)
@@ -2659,6 +2703,167 @@ export class AdminService {
       success: true,
       downloadUrl,
       fileName,
+    };
+  }
+
+  // ======================
+  // 사용자 활동 로그 조회
+  // ======================
+
+  async getUserActivityLogs(query: any): Promise<any> {
+    const {
+      search,
+      user_type,
+      action_category,
+      start_date,
+      end_date,
+      page = 1,
+      limit = 20
+    } = query;
+
+    // 사용자 활동 관련 로그만 조회 (USER, AUTH 카테고리)
+    let queryBuilder = this.systemLogRepository
+      .createQueryBuilder('log')
+      .where('log.category IN (:...categories)', { categories: ['auth', 'user', 'expert', 'payment'] })
+      .andWhere('log.user_id IS NOT NULL') // 사용자 관련 로그만
+      .orderBy('log.timestamp', 'DESC');
+
+    // 검색 필터
+    if (search) {
+      queryBuilder.andWhere(
+        '(log.user_name LIKE :search OR log.action LIKE :search OR log.details LIKE :search)',
+        { search: `%${search}%` }
+      );
+    }
+
+    // 사용자 타입 필터
+    if (user_type) {
+      queryBuilder.andWhere('log.user_type = :user_type', { user_type });
+    }
+
+    // 액션 카테고리 필터
+    if (action_category) {
+      queryBuilder.andWhere('log.category = :action_category', { action_category });
+    }
+
+    // 날짜 범위 필터
+    if (start_date) {
+      queryBuilder.andWhere('log.timestamp::date >= :start_date', { start_date });
+    }
+    if (end_date) {
+      queryBuilder.andWhere('log.timestamp::date <= :end_date', { end_date });
+    }
+
+    // 페이지네이션
+    const offset = (page - 1) * limit;
+    queryBuilder.skip(offset).take(limit);
+
+    const [logs, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      data: logs.map(log => ({
+        id: log.id,
+        timestamp: log.timestamp,
+        userId: log.userId,
+        userName: log.userName,
+        userType: log.userType,
+        action: log.action,
+        category: log.category,
+        details: log.details,
+        ipAddress: log.ipAddress,
+        userAgent: log.userAgent,
+        level: log.level,
+        createdAt: log.createdAt,
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / limit),
+      }
+    };
+  }
+
+  async getUserActivityLogStats(query: any): Promise<any> {
+    const { start_date, end_date } = query;
+
+    let whereCondition = 'log.category IN (\'auth\', \'user\', \'expert\', \'payment\') AND log.user_id IS NOT NULL';
+    const params: any = {};
+
+    if (start_date) {
+      whereCondition += ' AND log.timestamp::date >= :start_date';
+      params.start_date = start_date;
+    }
+    if (end_date) {
+      whereCondition += ' AND log.timestamp::date <= :end_date';
+      params.end_date = end_date;
+    }
+
+    // 전체 통계
+    const totalQuery = this.systemLogRepository
+      .createQueryBuilder('log')
+      .where(whereCondition, params);
+
+    const total = await totalQuery.getCount();
+
+    // 오늘 통계
+    const todayQuery = this.systemLogRepository
+      .createQueryBuilder('log')
+      .where(whereCondition + ' AND log.timestamp::date = CURRENT_DATE', params);
+
+    const today = await todayQuery.getCount();
+
+    // 사용자 타입별 통계
+    const userTypeStats = await this.systemLogRepository
+      .createQueryBuilder('log')
+      .select('log.user_type', 'userType')
+      .addSelect('COUNT(*)', 'count')
+      .where(whereCondition, params)
+      .groupBy('log.user_type')
+      .getRawMany();
+
+    // 액션 카테고리별 통계
+    const categoryStats = await this.systemLogRepository
+      .createQueryBuilder('log')
+      .select('log.category', 'category')
+      .addSelect('COUNT(*)', 'count')
+      .where(whereCondition, params)
+      .groupBy('log.category')
+      .getRawMany();
+
+    // 최근 7일 활동 통계
+    const recentActivityStats = await this.systemLogRepository
+      .createQueryBuilder('log')
+      .select('log.timestamp::date', 'date')
+      .addSelect('COUNT(*)', 'count')
+      .where(whereCondition + ' AND log.timestamp >= CURRENT_DATE - INTERVAL \'7 days\'', params)
+      .groupBy('log.timestamp::date')
+      .orderBy('date', 'DESC')
+      .getRawMany();
+
+    // 활성 사용자 수 (오늘 활동한 사용자)
+    const activeUsersToday = await this.systemLogRepository
+      .createQueryBuilder('log')
+      .select('COUNT(DISTINCT log.user_id)', 'count')
+      .where(whereCondition + ' AND log.timestamp::date = CURRENT_DATE', params)
+      .getRawOne();
+
+    return {
+      total,
+      today,
+      activeUsersToday: parseInt(activeUsersToday.count),
+      userTypeStats: userTypeStats.reduce((acc, item) => {
+        acc[item.userType || 'unknown'] = parseInt(item.count);
+        return acc;
+      }, {}),
+      categoryStats: categoryStats.reduce((acc, item) => {
+        acc[item.category] = parseInt(item.count);
+        return acc;
+      }, {}),
+      recentActivity: recentActivityStats.map(item => ({
+        date: item.date,
+        count: parseInt(item.count)
+      }))
     };
   }
 }

@@ -49,19 +49,17 @@ export class SystemLogInterceptor implements NestInterceptor {
           userName: user?.fullName || user?.name,
           ipAddress,
           userAgent,
-          details: `HTTP ${method} ${url} - ${statusCode} in ${responseTime}ms`,
+          details: `API 요청 성공: ${method} ${url}`,
           requestId,
           responseTime,
           statusCode,
-          errorMessage: null,
-          stackTrace: null,
         });
       }),
       catchError(async (error) => {
         const responseTime = Date.now() - startTime;
-        const statusCode = error?.status || 500;
+        const statusCode = error.status || 500;
 
-        // 오류 로그 기록
+        // 에러 요청 로그 기록
         await this.createSystemLog({
           level: LogLevel.ERROR,
           category: this.getCategoryFromUrl(url),
@@ -71,12 +69,12 @@ export class SystemLogInterceptor implements NestInterceptor {
           userName: user?.fullName || user?.name,
           ipAddress,
           userAgent,
-          details: `HTTP ${method} ${url} - ${statusCode} in ${responseTime}ms - ${error?.message || 'Unknown error'}`,
+          details: `API 요청 실패: ${method} ${url}`,
           requestId,
           responseTime,
           statusCode,
-          errorMessage: error?.message || 'Unknown error',
-          stackTrace: error?.stack,
+          errorMessage: error.message,
+          stackTrace: error.stack,
         });
 
         return throwError(() => error);
@@ -112,5 +110,89 @@ export class SystemLogInterceptor implements NestInterceptor {
     const timestamp = Date.now();
     const random = Math.random().toString(36).substring(2, 8);
     return `req_${timestamp}_${random}`;
+  }
+}
+
+// 시스템 로그 생성을 위한 유틸리티 서비스
+@Injectable()
+export class SystemLogService {
+  constructor(
+    @InjectRepository(SystemLog)
+    private readonly systemLogRepository: Repository<SystemLog>,
+  ) {}
+
+  async createLog(data: {
+    level: LogLevel;
+    category: LogCategory;
+    action: string;
+    details: string;
+    userId?: number;
+    userType?: string;
+    userName?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    requestId?: string;
+    responseTime?: number;
+    statusCode?: number;
+    errorMessage?: string;
+    stackTrace?: string;
+  }): Promise<SystemLog> {
+    try {
+      const systemLog = this.systemLogRepository.create({
+        ...data,
+        timestamp: new Date(),
+        ipAddress: data.ipAddress || 'system',
+      });
+      
+      return await this.systemLogRepository.save(systemLog);
+    } catch (error) {
+      LoggerUtil.error('시스템 로그 생성 실패', error);
+      throw error;
+    }
+  }
+
+
+  async logPaymentEvent(action: string, details: string, userId?: number, userName?: string, ipAddress?: string): Promise<void> {
+    await this.createSystemLog({
+      level: LogLevel.INFO,
+      category: LogCategory.PAYMENT,
+      action,
+      details,
+      userId,
+      userName,
+      userType: null,
+      ipAddress: ipAddress || 'unknown',
+      userAgent: 'unknown',
+      requestId: null,
+      responseTime: null,
+      statusCode: null,
+      errorMessage: null,
+      stackTrace: null,
+    });
+  }
+
+  async logSystemEvent(level: LogLevel, action: string, details: string, errorMessage?: string): Promise<void> {
+    await this.createLog({
+      level,
+      category: LogCategory.SYSTEM,
+      action,
+      details,
+      errorMessage,
+      ipAddress: 'system',
+      userAgent: 'System Service',
+    });
+  }
+
+  async logAdminAction(action: string, details: string, adminId: number, adminName: string, ipAddress: string): Promise<void> {
+    await this.createLog({
+      level: LogLevel.INFO,
+      category: LogCategory.ADMIN,
+      action,
+      details,
+      userId: adminId,
+      userType: 'admin',
+      userName: adminName,
+      ipAddress,
+    });
   }
 }

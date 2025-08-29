@@ -88,16 +88,23 @@ export class AdminUserDto {
   @Expose()
   profile_image?: string;
 
+  // 센터 정보
   @Expose()
-  @Type(() => Date)
+  center_id?: number;
+
+  @Expose()
+  center_name?: string;
+
+  @Expose()
+  center_code?: string;
+
+  @Expose()
   signup_date: Date;
 
   @Expose()
-  @Type(() => Date)
   created_at: Date;
 
   @Expose()
-  @Type(() => Date)
   updated_at: Date;
 
   // 추가 통계 정보
@@ -111,7 +118,6 @@ export class AdminUserDto {
   psych_test_count?: number;
 
   @Expose()
-  @Type(() => Date)
   last_login_at?: Date;
 
   @Expose()
