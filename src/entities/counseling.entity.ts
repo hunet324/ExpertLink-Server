@@ -1,13 +1,22 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from './user.entity';
-import { Schedule } from './schedule.entity';
+import { ExpertProfile } from './expert-profile.entity';
 
 export enum CounselingStatus {
-  PENDING = 'pending',
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled'
+  AVAILABLE = 'available',       // 예약 가능한 슬롯
+  PENDING = 'pending',           // 상담 신청, 승인 대기
+  SCHEDULE_PROPOSED = 'schedule_proposed', // 전문가가 일정을 제안한 상태
+  APPROVED = 'approved',         // 상담 확정
+  IN_PROGRESS = 'in_progress',   // 상담 진행 중
+  COMPLETED = 'completed',       // 상담 완료
+  CANCELLED = 'cancelled',       // 상담 취소
+  REJECTED = 'rejected'          // 전문가 거절
+}
+
+export enum CounselingType {
+  VIDEO = 'video',
+  CHAT = 'chat',
+  VOICE = 'voice'
 }
 
 export enum PaymentStatus {
@@ -22,26 +31,42 @@ export class Counseling {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
-  user_id: number;
+  @Column({ nullable: true })
+  user_id: number;  // NULL이면 가용 슬롯
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @Column({ nullable: true })
+  @Column()
   expert_id: number;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'expert_id' })
   expert: User;
 
-  @Column({ nullable: true })
-  schedule_id: number;
+  @ManyToOne(() => ExpertProfile)
+  @JoinColumn({ name: 'expert_id' })
+  expertProfile: ExpertProfile;
 
-  @ManyToOne(() => Schedule)
-  @JoinColumn({ name: 'schedule_id' })
-  schedule: Schedule;
+  // 일정 정보 (기존 schedules 필드들 통합)
+  @Column({ type: 'date', nullable: true })
+  schedule_date: string;
+
+  @Column({ type: 'time', nullable: true })
+  start_time: string;
+
+  @Column({ type: 'time', nullable: true })
+  end_time: string;
+
+  @Column({ default: 60 })
+  duration: number;
+
+  @Column({ length: 200, nullable: true })
+  title: string;
+
+  @Column({ type: 'text', nullable: true })
+  notes: string;
 
   @CreateDateColumn()
   request_date: Date;
@@ -56,8 +81,15 @@ export class Counseling {
   })
   status: CounselingStatus;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', nullable: true })
   reason: string;
+
+  @Column({
+    type: 'enum',
+    enum: CounselingType,
+    default: CounselingType.VIDEO
+  })
+  type: CounselingType;
 
   @Column({ type: 'text', nullable: true })
   session_notes: string;
@@ -78,9 +110,48 @@ export class Counseling {
   })
   payment_status: PaymentStatus;
 
+  // 실제 상담 시간 추적
+  @Column({ type: 'timestamp', nullable: true })
+  actual_start_time: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  actual_end_time: Date;
+
   @CreateDateColumn()
   created_at: Date;
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  // 유틸리티 메서드들
+  isAvailableSlot(): boolean {
+    return this.user_id === null && this.status === CounselingStatus.AVAILABLE;
+  }
+
+  isBookedSession(): boolean {
+    return this.user_id !== null;
+  }
+
+  isActiveSession(): boolean {
+    const now = new Date();
+    const sessionStart = new Date(`${this.schedule_date}T${this.start_time}`);
+    const sessionEnd = new Date(`${this.schedule_date}T${this.end_time}`);
+    
+    return now >= sessionStart && now <= sessionEnd && 
+           this.status === CounselingStatus.IN_PROGRESS;
+  }
+
+  canBeCancelled(): boolean {
+    return [
+      CounselingStatus.PENDING,
+      CounselingStatus.APPROVED
+    ].includes(this.status);
+  }
+
+  canBeModified(): boolean {
+    return [
+      CounselingStatus.AVAILABLE,
+      CounselingStatus.PENDING
+    ].includes(this.status);
+  }
 }

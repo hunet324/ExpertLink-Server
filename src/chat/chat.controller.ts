@@ -2,6 +2,7 @@ import {
   Controller, 
   Get, 
   Post, 
+  Put,
   Param, 
   Body, 
   Query,
@@ -9,8 +10,11 @@ import {
   Req,
   HttpCode,
   HttpStatus,
-  ParseIntPipe
+  ParseIntPipe,
+  UseInterceptors,
+  UploadedFile
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -61,6 +65,87 @@ export class ChatController {
     return { success: true };
   }
 
+  @Get('rooms/:id')
+  async getChatRoom(
+    @Param('id', ParseIntPipe) roomId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ChatRoomResponseDto> {
+    return await this.chatService.getChatRoom(roomId, req.user.userId);
+  }
+
+  @Post('rooms/:id/join')
+  @HttpCode(HttpStatus.OK)
+  async joinChatRoom(
+    @Param('id', ParseIntPipe) roomId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean; sessionInfo: any }> {
+    const sessionInfo = await this.chatService.joinChatRoom(roomId, req.user.userId);
+    return { success: true, sessionInfo };
+  }
+
+  @Post('rooms/:id/leave')
+  @HttpCode(HttpStatus.OK)
+  async leaveChatRoom(
+    @Param('id', ParseIntPipe) roomId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    await this.chatService.leaveChatRoom(roomId, req.user.userId);
+    return { success: true };
+  }
+
+  @Post('messages')
+  @HttpCode(HttpStatus.CREATED)
+  async sendMessageToRoom(
+    @Body() createMessageDto: CreateMessageDto & { roomId: number },
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ChatMessageResponseDto> {
+    return await this.chatService.createMessage(createMessageDto.roomId, req.user.userId, createMessageDto);
+  }
+
+  @Put('messages/:messageId/read')
+  @HttpCode(HttpStatus.OK)
+  async markSingleMessageAsRead(
+    @Param('messageId', ParseIntPipe) messageId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean }> {
+    await this.chatService.markMessageAsRead(messageId, req.user.userId);
+    return { success: true };
+  }
+
+  @Put('rooms/:id/read')
+  @HttpCode(HttpStatus.OK)
+  async markAllRoomMessagesAsRead(
+    @Param('id', ParseIntPipe) roomId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ success: boolean; markedCount: number }> {
+    const markedCount = await this.chatService.markAllRoomMessagesAsRead(roomId, req.user.userId);
+    return { success: true, markedCount };
+  }
+
+  @Get('rooms/counseling/:counselingId')
+  async getChatRoomByCounseling(
+    @Param('counselingId', ParseIntPipe) counselingId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ChatRoomResponseDto | null> {
+    return await this.chatService.getChatRoomByCounseling(counselingId, req.user.userId);
+  }
+
+  @Get('rooms/:id/session')
+  async getChatSession(
+    @Param('id', ParseIntPipe) roomId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<any> {
+    return await this.chatService.getChatSessionInfo(roomId, req.user.userId);
+  }
+
+  @Get('unread-count')
+  async getUnreadMessageCount(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ count: number }> {
+    const count = await this.chatService.getUserUnreadMessageCount(req.user.userId);
+    return { count };
+  }
+
   @Post('rooms/counseling/:counselingId')
   @HttpCode(HttpStatus.CREATED)
   async createChatRoomFromCounseling(
@@ -68,5 +153,16 @@ export class ChatController {
     @Req() req: AuthenticatedRequest,
   ): Promise<ChatRoomResponseDto> {
     return await this.chatService.createChatRoomFromCounseling(counselingId);
+  }
+
+  @Post('rooms/:id/upload')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadFile(
+    @Param('id', ParseIntPipe) roomId: number,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ fileUrl: string; fileName: string; fileSize: number }> {
+    return await this.chatService.uploadFile(roomId, file, req.user.userId);
   }
 }

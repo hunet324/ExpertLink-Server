@@ -16,7 +16,6 @@ import { Payment } from '../entities/payment.entity';
 import { Notification } from '../entities/notification.entity';
 import { NotificationTemplate } from '../entities/notification-template.entity';
 import { ChatMessage } from '../entities/chat-message.entity';
-import { Schedule } from '../entities/schedule.entity';
 // 새로운 권한 시스템 엔티티들
 import { AdminRole } from '../entities/admin-role.entity';
 import { AdminPermission } from '../entities/admin-permission.entity';
@@ -52,7 +51,6 @@ import { UsersModule } from '../users/users.module';
       Notification,
       NotificationTemplate,
       ChatMessage,
-      Schedule,
       // 새로운 권한 시스템 엔티티들
       AdminRole,
       AdminPermission,

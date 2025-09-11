@@ -7,18 +7,40 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { TransformRequestInterceptor } from './common/interceptors/transform-request.interceptor';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
+import { PerformanceInterceptor } from './common/interceptors/performance.interceptor';
 import { CaseTransformPipe } from './common/pipes/case-transform.pipe';
 import { LoggerUtil } from './common/utils/logger.util';
+import { initSentry } from './common/sentry.config';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Sentry 초기화 (앱 생성 전)
+  initSentry();
+  
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // 프로덕션에서 로그 레벨 조정
+    logger: process.env.NODE_ENV === 'production' ? ['error', 'warn', 'log'] : ['error', 'warn', 'log', 'debug', 'verbose'],
+  });
   
   const configService = app.get(ConfigService);
   const corsOrigin = configService.get<string>('CORS_ORIGIN');
   
+  // 응답 압축 활성화 (compression 모듈 설치 후 활성화)
+  try {
+    const compression = require('compression');
+    app.use(compression());
+    LoggerUtil.info('응답 압축이 활성화되었습니다');
+  } catch (error) {
+    LoggerUtil.warn('compression 모듈이 설치되지 않았습니다. 압축 기능이 비활성화됩니다.');
+  }
+  
+  // 글로벌 API 프리픽스 설정
+  app.setGlobalPrefix('api');
+
   app.enableCors({
-    origin: corsOrigin ? corsOrigin.split(',') : [],
+    origin: corsOrigin ? corsOrigin.split(',') : ['http://localhost:3000', 'http://kkssyy.ipdisk.co.kr:11001'],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Center-Id', 'X-User-Type'],
   });
   
   app.useGlobalPipes(
@@ -30,9 +52,10 @@ async function bootstrap() {
     })
   );
 
-  // 요청/응답 데이터 케이스 변환
+  // 글로벌 인터셉터 적용
   app.useGlobalInterceptors(
-    // new TransformRequestInterceptor(), // camelCase → snake_case (임시 주석처리)
+    new PerformanceInterceptor(), // 성능 모니터링
+    new TransformRequestInterceptor(), // camelCase → snake_case
     new TransformResponseInterceptor(), // snake_case → camelCase
   );
 

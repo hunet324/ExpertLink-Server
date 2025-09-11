@@ -11,7 +11,8 @@ import {
   UseGuards, 
   Request,
   HttpStatus,
-  HttpCode
+  HttpCode,
+  ForbiddenException
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { VacationService } from './vacation.service';
@@ -23,30 +24,59 @@ import { LoggerUtil } from '../common/utils/logger.util';
 
 @ApiTags('Expert Vacation Management')
 @ApiBearerAuth()
-@Controller('experts/vacation')
+@Controller('experts')
 @UseGuards(JwtAuthGuard)
 export class VacationController {
   constructor(private readonly vacationService: VacationService) {}
 
-  @Post()
-  @ApiOperation({ summary: '휴가 신청' })
-  @ApiResponse({ status: 201, description: '휴가 신청 성공', type: VacationResponseDto })
-  @ApiResponse({ status: 400, description: '잘못된 요청 데이터' })
-  @ApiResponse({ status: 404, description: '전문가를 찾을 수 없음' })
-  @HttpCode(HttpStatus.CREATED)
-  async createVacation(
-    @Body(CaseTransformPipe) createVacationDto: CreateVacationDto,
-    @Request() req: any
-  ): Promise<VacationResponseDto> {
-    LoggerUtil.log('INFO', 'Creating vacation request', { 
-      userId: req.user.id, 
-      expertId: createVacationDto.expert_id 
-    });
+  @Get('vacation/stats/summary')
+  @ApiOperation({ summary: '휴가 통계 조회' })
+  @ApiQuery({ name: 'expert_id', required: false, description: '전문가 ID (관리자만)' })
+  @ApiResponse({ status: 200, description: '휴가 통계 조회 성공' })
+  async getVacationStats(
+    @Query('expert_id') expertIdParam?: string,
+    @Request() req?: any
+  ): Promise<any> {
+    // expert_id 파라미터 처리
+    let expertId: number | undefined = undefined;
+    if (expertIdParam) {
+      expertId = parseInt(expertIdParam);
+      if (isNaN(expertId)) {
+        expertId = undefined;
+      }
+    }
 
-    return await this.vacationService.createVacation(createVacationDto, req.user.id);
+    LoggerUtil.log('INFO', 'Fetching vacation stats', { userId: req?.user?.id, expertId });
+
+    // 일반 전문가는 본인 통계만 조회 가능
+    if (!['super_admin', 'center_manager'].includes(req.user.userType)) {
+      expertId = req.user.id;
+    }
+
+    return await this.vacationService.getVacationStats(expertId);
   }
 
-  @Get()
+  @Get('vacation/expert/:expertId')
+  @UseGuards(CenterManagerGuard)
+  @ApiOperation({ summary: '특정 전문가 휴가 목록 조회 (관리자용)' })
+  @ApiParam({ name: 'expertId', description: '전문가 ID' })
+  @ApiResponse({ status: 200, description: '전문가 휴가 목록 조회 성공', type: VacationListResponseDto })
+  async getVacationsByExpertId(
+    @Param('expertId', ParseIntPipe) expertId: number,
+    @Query() queryDto: VacationQueryDto,
+    @Request() req: any
+  ): Promise<VacationListResponseDto> {
+    LoggerUtil.log('INFO', 'Fetching vacations for expert', { 
+      userId: req.user.id, 
+      expertId, 
+      queryDto 
+    });
+
+    queryDto.expert_id = expertId;
+    return await this.vacationService.getVacations(queryDto, req.user);
+  }
+
+  @Get('vacation')
   @ApiOperation({ summary: '휴가 목록 조회' })
   @ApiResponse({ status: 200, description: '휴가 목록 조회 성공', type: VacationListResponseDto })
   @ApiQuery({ name: 'expert_id', required: false, description: '전문가 ID' })
@@ -57,9 +87,27 @@ export class VacationController {
   @ApiQuery({ name: 'page', required: false, description: '페이지 번호' })
   @ApiQuery({ name: 'limit', required: false, description: '페이지당 항목 수' })
   async getVacations(
-    @Query(CaseTransformPipe) queryDto: VacationQueryDto,
-    @Request() req: any
+    @Query('expert_id') expertId?: string,
+    @Query('status') status?: string,
+    @Query('vacation_type') vacationType?: string,
+    @Query('start_date') startDate?: string,
+    @Query('end_date') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Request() req?: any
   ): Promise<VacationListResponseDto> {
+    // 수동으로 파라미터 파싱
+    const queryDto: any = {};
+    
+    if (expertId) queryDto.expert_id = parseInt(expertId);
+    if (status) queryDto.status = status;
+    if (vacationType) queryDto.vacation_type = vacationType;
+    if (startDate) queryDto.start_date = startDate;
+    if (endDate) queryDto.end_date = endDate;
+    
+    queryDto.page = page ? parseInt(page) : 1;
+    queryDto.limit = limit ? parseInt(limit) : 20;
+
     LoggerUtil.log('INFO', 'Fetching vacation list', { userId: req.user.id, queryDto });
 
     // 일반 전문가는 본인 휴가만 조회 가능
@@ -67,10 +115,33 @@ export class VacationController {
       queryDto.expert_id = req.user.id;
     }
 
-    return await this.vacationService.getVacations(queryDto);
+    return await this.vacationService.getVacations(queryDto, req.user);
   }
 
-  @Get(':id')
+  @Post('vacation')
+  @ApiOperation({ summary: '휴가 신청' })
+  @ApiResponse({ status: 201, description: '휴가 신청 성공', type: VacationResponseDto })
+  @ApiResponse({ status: 400, description: '잘못된 요청 데이터' })
+  @ApiResponse({ status: 404, description: '전문가를 찾을 수 없음' })
+  @HttpCode(HttpStatus.CREATED)
+  async createVacation(
+    @Body(CaseTransformPipe) createVacationDto: CreateVacationDto,
+    @Request() req: any
+  ): Promise<VacationResponseDto> {
+    // expert_id가 없으면 현재 사용자 ID로 자동 설정
+    if (!createVacationDto.expert_id) {
+      createVacationDto.expert_id = req.user.id;
+    }
+
+    LoggerUtil.log('INFO', 'Creating vacation request', { 
+      userId: req.user.id, 
+      expertId: createVacationDto.expert_id 
+    });
+
+    return await this.vacationService.createVacation(createVacationDto, req.user.id);
+  }
+
+  @Get('vacation/:id')
   @ApiOperation({ summary: '휴가 상세 조회' })
   @ApiParam({ name: 'id', description: '휴가 ID' })
   @ApiResponse({ status: 200, description: '휴가 상세 조회 성공', type: VacationResponseDto })
@@ -81,7 +152,7 @@ export class VacationController {
   ): Promise<VacationResponseDto> {
     LoggerUtil.log('INFO', 'Fetching vacation by ID', { userId: req.user.id, vacationId: id });
 
-    const vacation = await this.vacationService.getVacationById(id);
+    const vacation = await this.vacationService.getVacationById(id, req.user);
 
     // 일반 전문가는 본인 휴가만 조회 가능
     if (!['super_admin', 'center_manager'].includes(req.user.userType) && 
@@ -91,13 +162,13 @@ export class VacationController {
         vacationId: id,
         expertId: vacation.expert_id 
       });
-      throw new Error('해당 휴가를 조회할 권한이 없습니다.');
+      throw new ForbiddenException('해당 휴가를 조회할 권한이 없습니다.');
     }
 
     return vacation;
   }
 
-  @Put(':id/status')
+  @Put('vacation/:id/status')
   @UseGuards(CenterManagerGuard)
   @ApiOperation({ summary: '휴가 승인/거부' })
   @ApiParam({ name: 'id', description: '휴가 ID' })
@@ -116,10 +187,10 @@ export class VacationController {
       newStatus: updateStatusDto.status 
     });
 
-    return await this.vacationService.updateVacationStatus(id, updateStatusDto, req.user.id);
+    return await this.vacationService.updateVacationStatus(id, updateStatusDto, req.user.id, req.user);
   }
 
-  @Delete(':id')
+  @Delete('vacation/:id')
   @ApiOperation({ summary: '휴가 삭제' })
   @ApiParam({ name: 'id', description: '휴가 ID' })
   @ApiResponse({ status: 204, description: '휴가 삭제 성공' })
@@ -133,43 +204,5 @@ export class VacationController {
     LoggerUtil.log('INFO', 'Deleting vacation', { userId: req.user.id, vacationId: id });
 
     await this.vacationService.deleteVacation(id, req.user.id);
-  }
-
-  @Get('stats/summary')
-  @ApiOperation({ summary: '휴가 통계 조회' })
-  @ApiQuery({ name: 'expert_id', required: false, description: '전문가 ID (관리자만)' })
-  @ApiResponse({ status: 200, description: '휴가 통계 조회 성공' })
-  async getVacationStats(
-    @Query('expert_id', new ParseIntPipe({ optional: true })) expertId?: number,
-    @Request() req?: any
-  ): Promise<any> {
-    LoggerUtil.log('INFO', 'Fetching vacation stats', { userId: req?.user?.id, expertId });
-
-    // 일반 전문가는 본인 통계만 조회 가능
-    if (!['super_admin', 'center_manager'].includes(req.user.userType)) {
-      expertId = req.user.id;
-    }
-
-    return await this.vacationService.getVacationStats(expertId);
-  }
-
-  @Get('expert/:expertId')
-  @UseGuards(CenterManagerGuard)
-  @ApiOperation({ summary: '특정 전문가 휴가 목록 조회 (관리자용)' })
-  @ApiParam({ name: 'expertId', description: '전문가 ID' })
-  @ApiResponse({ status: 200, description: '전문가 휴가 목록 조회 성공', type: VacationListResponseDto })
-  async getVacationsByExpertId(
-    @Param('expertId', ParseIntPipe) expertId: number,
-    @Query(CaseTransformPipe) queryDto: VacationQueryDto,
-    @Request() req: any
-  ): Promise<VacationListResponseDto> {
-    LoggerUtil.log('INFO', 'Fetching vacations for expert', { 
-      userId: req.user.id, 
-      expertId, 
-      queryDto 
-    });
-
-    queryDto.expert_id = expertId;
-    return await this.vacationService.getVacations(queryDto);
   }
 }

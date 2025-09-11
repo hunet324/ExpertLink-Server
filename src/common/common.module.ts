@@ -2,6 +2,7 @@ import { Module, Global } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PermissionService } from './services/permission.service';
 import { SystemLogService } from './services/system-log.service';
+import { CacheService } from './services/cache.service';
 import { AdminRole } from '../entities/admin-role.entity';
 import { AdminPermission } from '../entities/admin-permission.entity';
 import { UserRole } from '../entities/user-role.entity';
@@ -19,7 +20,7 @@ import { SystemLog } from '../entities/system-log.entity';
       SystemLog
     ])
   ],
-  providers: [PermissionService, SystemLogService],
-  exports: [PermissionService, SystemLogService]
+  providers: [PermissionService, SystemLogService, CacheService],
+  exports: [PermissionService, SystemLogService, CacheService]
 })
 export class CommonModule {}

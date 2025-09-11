@@ -170,12 +170,40 @@ export class AuthService {
   }
 
   async changePassword(userId: number, changePasswordDto: ChangePasswordDto): Promise<{ success: boolean; message: string }> {
-    const { currentPassword, newPassword } = changePasswordDto;
+    const { current_password: currentPassword, new_password: newPassword } = changePasswordDto;
     
     await this.usersService.changePassword(userId, currentPassword, newPassword);
 
-    // 비밀번호 변경 후 다른 세션 무효화 (보안을 위해)
+    // 현재 요청의 토큰 정보 추출
+    const currentAuthHeader = this.request.get('Authorization');
+    let currentRefreshToken: string | null = null;
+    
+    if (currentAuthHeader) {
+      try {
+        const currentAccessToken = currentAuthHeader.replace('Bearer ', '');
+        const payload = JSON.parse(Buffer.from(currentAccessToken.split('.')[1], 'base64').toString());
+        
+        // 현재 사용자의 refresh token 조회
+        currentRefreshToken = await this.redisService.get(`refresh_token:${userId}`);
+      } catch (error) {
+        console.warn('현재 토큰 정보 추출 실패:', error);
+      }
+    }
+
+    // 비밀번호 변경 후 기존 refresh token 무효화
     await this.redisService.delete(`refresh_token:${userId}`);
+    
+    // 현재 세션 유지를 위해 새로운 토큰 생성 및 저장
+    if (currentRefreshToken) {
+      const user = await this.usersService.findById(userId);
+      const newTokens = await this.generateTokens(user);
+      
+      await this.redisService.set(
+        `refresh_token:${userId}`,
+        newTokens.refreshToken,
+        7 * 24 * 60 * 60 // 7일
+      );
+    }
     
     // 비밀번호 변경 로그 기록
     const user = await this.usersService.findById(userId);

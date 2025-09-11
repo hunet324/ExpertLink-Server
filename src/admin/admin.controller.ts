@@ -292,48 +292,51 @@ export class AdminController {
   }
 
   @UseGuards(JwtAuthGuard, AdminGuard)
-  @Get('schedules')
-  @ApiOperation({ summary: '전체 일정 조회', description: '관리자가 모든 센터의 일정을 조회합니다.' })
+  @Get('counselings')
+  @ApiOperation({ summary: '전체 상담 일정 조회', description: '관리자가 모든 센터의 상담 일정을 조회합니다.' })
   @ApiQuery({ 
     name: 'center_id', 
     required: false, 
-    description: '특정 센터의 일정만 조회하려는 경우 센터 ID', 
+    description: '특정 센터의 상담 일정만 조회하려는 경우 센터 ID', 
     example: 1 
   })
-  @ApiResponse({ status: 200, description: '일정 조회 성공' })
+  @ApiResponse({ status: 200, description: '상담 일정 조회 성공' })
   @ApiResponse({ status: 401, description: '인증 토큰이 필요합니다.' })
   @ApiResponse({ status: 403, description: '관리자 권한이 필요합니다.' })
   @ApiBearerAuth('JWT-auth')
-  async getAllSchedules(
+  async getAllCounselings(
     @Query('center_id') centerId?: string,
   ): Promise<{
-    schedules: any[];
-    totalSchedules: number;
-    availableSchedules: number;
-    bookedSchedules: number;
-    completedSchedules: number;
-    cancelledSchedules: number;
+    counselings: any[];
+    totalCounselings: number;
+    availableSlots: number;
+    pendingCounselings: number;
+    approvedCounselings: number;
+    inProgressCounselings: number;
+    completedCounselings: number;
+    cancelledCounselings: number;
+    rejectedCounselings: number;
   }> {
     const parsedCenterId = centerId ? parseInt(centerId) : undefined;
-    return await this.adminService.getAllSchedules(parsedCenterId);
+    return await this.adminService.getAllCounselings(parsedCenterId);
   }
 
   @UseGuards(JwtAuthGuard, AdminGuard)
-  @Put('schedules/:id/cancel')
+  @Put('counselings/:id/cancel')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '일정 취소', description: '관리자가 특정 일정을 취소합니다.' })
-  @ApiParam({ name: 'id', description: '일정 ID', type: 'number' })
-  @ApiResponse({ status: 200, description: '일정 취소 성공' })
+  @ApiOperation({ summary: '상담 취소', description: '관리자가 특정 상담을 취소합니다.' })
+  @ApiParam({ name: 'id', description: '상담 ID', type: 'number' })
+  @ApiResponse({ status: 200, description: '상담 취소 성공' })
   @ApiResponse({ status: 401, description: '인증 토큰이 필요합니다.' })
   @ApiResponse({ status: 403, description: '관리자 권한이 필요합니다.' })
-  @ApiResponse({ status: 404, description: '일정을 찾을 수 없습니다.' })
+  @ApiResponse({ status: 404, description: '상담을 찾을 수 없습니다.' })
   @ApiBearerAuth('JWT-auth')
-  async cancelSchedule(
-    @Param('id', ParseIntPipe) scheduleId: number,
+  async cancelCounseling(
+    @Param('id', ParseIntPipe) counselingId: number,
     @Req() req: AuthenticatedRequest,
   ): Promise<{ success: boolean; message: string }> {
     const adminId = req.user.userId;
-    return await this.adminService.cancelSchedule(scheduleId, adminId);
+    return await this.adminService.cancelCounseling(counselingId, adminId);
   }
 
   @UseGuards(JwtAuthGuard, AdminGuard)

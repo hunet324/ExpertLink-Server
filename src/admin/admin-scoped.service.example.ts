@@ -4,7 +4,7 @@ import { Repository, Between, In, LessThanOrEqual, MoreThanOrEqual } from 'typeo
 import { User, UserType } from '../entities/user.entity';
 import { Center } from '../entities/center.entity';
 import { ExpertProfile } from '../entities/expert-profile.entity';
-import { Schedule, ScheduleStatus } from '../entities/schedule.entity';
+// import { Schedule, ScheduleStatus } from '../entities/schedule.entity'; // Removed - schedules migrated to counselings
 import { ExpertVacation, VacationStatus, VacationType } from '../entities/expert-vacation.entity';
 import { WorkLog, WorkStatus } from '../entities/work-log.entity';
 import { QueryScopeUtil, ScopeUser } from '../common/utils/query-scope.util';
@@ -18,8 +18,8 @@ export class AdminScopedServiceExample {
     private centerRepository: Repository<Center>,
     @InjectRepository(ExpertProfile)
     private expertRepository: Repository<ExpertProfile>,
-    @InjectRepository(Schedule)
-    private scheduleRepository: Repository<Schedule>,
+    // @InjectRepository(Schedule) // Removed - schedules migrated to counselings
+    // private scheduleRepository: Repository<Schedule>,
     @InjectRepository(ExpertVacation)
     private expertVacationRepository: Repository<ExpertVacation>,
     @InjectRepository(WorkLog)
@@ -125,24 +125,14 @@ export class AdminScopedServiceExample {
       throw new ForbiddenException('해당 전문가를 관리할 권한이 없습니다.');
     }
 
-    // 휴가 기간 동안 기존 스케줄 확인
-    const existingSchedules = await this.scheduleRepository.find({
-      where: {
-        expert_id: expertId,
-        schedule_date: Between(vacationData.startDate, vacationData.endDate),
-        status: In([ScheduleStatus.AVAILABLE, ScheduleStatus.BOOKED])
-      }
-    });
-
-    // 예약된 스케줄이 있는 경우 경고
-    if (existingSchedules.length > 0) {
-      const bookedSchedules = existingSchedules.filter(s => s.status === ScheduleStatus.BOOKED);
-      if (bookedSchedules.length > 0) {
-        throw new BadRequestException(
-          `휴가 기간 중 ${bookedSchedules.length}건의 예약된 상담이 있습니다. 먼저 처리해주세요.`
-        );
-      }
-    }
+    // 휴가 기간 동안 기존 상담 확인 (통합 상담 시스템 사용)
+    // TODO: CounselingsService를 통해 휴가 기간 중 예약된 상담 확인
+    // const existingCounselings = await this.counselingsService.getExpertCounselingsInPeriod(
+    //   expertId, vacationData.startDate, vacationData.endDate
+    // );
+    
+    // 현재는 경고 없이 진행 (추후 통합 상담 시스템과 연동 필요)
+    console.log('휴가 설정 - 통합 상담 시스템과의 연동은 추후 구현 예정');
 
     // 휴가 신청 생성
     const vacation = this.expertVacationRepository.create({
@@ -158,19 +148,17 @@ export class AdminScopedServiceExample {
 
     const savedVacation = await this.expertVacationRepository.save(vacation);
 
-    // 휴가 기간 동안의 available 스케줄을 cancelled로 변경
-    await this.scheduleRepository.update(
-      {
-        expert_id: expertId,
-        schedule_date: Between(vacationData.startDate, vacationData.endDate),
-        status: ScheduleStatus.AVAILABLE
-      },
-      { status: ScheduleStatus.CANCELLED, notes: `휴가로 인한 취소 - ${vacationData.reason}` }
-    );
+    // 휴가 기간 동안의 가능한 슬롯 취소 (통합 상담 시스템에서 처리)
+    // TODO: CounselingsService를 통해 휴가 기간의 가용 슬롯 비활성화
+    // await this.counselingsService.cancelAvailableSlotsInPeriod(
+    //   expertId, vacationData.startDate, vacationData.endDate, `휴가로 인한 취소 - ${vacationData.reason}`
+    // );
+    
+    console.log('휴가 기간 슬롯 취소 - 통합 상담 시스템과의 연동은 추후 구현 예정');
 
     return {
       vacation: savedVacation,
-      cancelledSchedules: existingSchedules.filter(s => s.status === ScheduleStatus.AVAILABLE).length,
+      cancelledSchedules: 0, // 통합 상담 시스템과 연동 후 실제 값으로 업데이트
       message: '전문가 휴가가 성공적으로 설정되었습니다.'
     };
   }

@@ -37,6 +37,18 @@ export class ExpertProfile {
   @Column({ type: 'text', nullable: true })
   career_history: string;
 
+  @Column('text', { array: true, default: [], nullable: true })
+  certifications: string[];
+
+  @Column({ type: 'jsonb', default: {}, nullable: true })
+  available_hours: object;
+
+  @Column({ type: 'jsonb', default: { video: true, chat: true, voice: true }, nullable: true })
+  consultation_settings: object;
+
+  @Column({ type: 'jsonb', default: { video: 0, chat: 0, voice: 0 }, nullable: true })
+  pricing_settings: object;
+
   @Column({ default: false })
   is_verified: boolean;
 

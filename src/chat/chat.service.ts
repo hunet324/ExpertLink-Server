@@ -1,4 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import * as path from 'path';
+import * as fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ChatRoom, ChatRoomStatus } from '../entities/chat-room.entity';
@@ -227,7 +230,7 @@ export class ChatService {
     const room = this.chatRoomRepository.create({
       counseling_id: counselingId,
       participants: [counseling.user_id, counseling.expert_id],
-      room_name: `${counseling.user.name} - ${counseling.expert.name} 상담`,
+      room_name: `${counseling.user.name} - ${counseling.expert?.name || '전문가'} 상담`,
       status: ChatRoomStatus.ACTIVE,
     });
 
@@ -238,7 +241,7 @@ export class ChatService {
       room_id: savedRoom.id,
       sender_id: null,
       message_type: MessageType.SYSTEM,
-      content: `${counseling.user.name}님과 ${counseling.expert.name} 전문가의 상담이 시작되었습니다.`,
+      content: `${counseling.user.name}님과 ${counseling.expert?.name || '전문가'}의 상담이 시작되었습니다.`,
     });
 
     await this.chatMessageRepository.save(systemMessage);
@@ -287,5 +290,247 @@ export class ChatService {
       .getMany();
 
     return users;
+  }
+
+  async getChatRoom(roomId: number, userId: number): Promise<ChatRoomResponseDto> {
+    // 접근 권한 확인
+    const canAccess = await this.canAccessRoom(roomId, userId);
+    if (!canAccess) {
+      throw new ForbiddenException('채팅방에 접근할 권한이 없습니다.');
+    }
+
+    const room = await this.chatRoomRepository
+      .createQueryBuilder('room')
+      .leftJoinAndSelect('room.counseling', 'counseling')
+      .leftJoinAndSelect('counseling.user', 'client')
+      .leftJoinAndSelect('counseling.expert', 'expert')
+      .where('room.id = :roomId', { roomId })
+      .getOne();
+
+    if (!room) {
+      throw new NotFoundException('채팅방을 찾을 수 없습니다.');
+    }
+
+    const dto = plainToClass(ChatRoomResponseDto, room, {
+      excludeExtraneousValues: true,
+    });
+
+    // 참여자 상세 정보 조회
+    const participants = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.id IN (:...ids)', { ids: room.participants })
+      .getMany();
+
+    dto.participant_details = await Promise.all(
+      participants.map(async (participant) => ({
+        id: participant.id,
+        name: participant.name,
+        profile_image: participant.profile_image,
+        user_type: participant.user_type,
+        is_online: await this.isUserOnline(participant.id),
+      }))
+    );
+
+    // 읽지 않은 메시지 수 조회
+    dto.unread_count = await this.getUnreadCount(userId, room.id);
+
+    return dto;
+  }
+
+  async joinChatRoom(roomId: number, userId: number): Promise<any> {
+    // 접근 권한 확인
+    const canAccess = await this.canAccessRoom(roomId, userId);
+    if (!canAccess) {
+      throw new ForbiddenException('채팅방에 참여할 권한이 없습니다.');
+    }
+
+    const room = await this.chatRoomRepository.findOne({
+      where: { id: roomId, status: ChatRoomStatus.ACTIVE },
+      relations: ['counseling', 'counseling.user', 'counseling.expert']
+    });
+
+    if (!room) {
+      throw new NotFoundException('활성화된 채팅방을 찾을 수 없습니다.');
+    }
+
+    // Redis에 사용자 온라인 상태 설정
+    await this.redisService.setAdd('online_users', userId.toString());
+    await this.redisService.set(`user_current_room:${userId}`, roomId.toString(), 3600);
+
+    // 세션 정보 반환
+    return {
+      roomId: room.id,
+      counselingId: room.counseling_id,
+      clientId: room.counseling?.user_id,
+      clientName: room.counseling?.user?.name,
+      expertId: room.counseling?.expert_id,
+      expertName: room.counseling?.expert?.name,
+      status: 'active',
+      startTime: room.created_at,
+      participants: room.participants
+    };
+  }
+
+  async leaveChatRoom(roomId: number, userId: number): Promise<void> {
+    // 접근 권한 확인
+    const canAccess = await this.canAccessRoom(roomId, userId);
+    if (!canAccess) {
+      throw new ForbiddenException('채팅방에 접근할 권한이 없습니다.');
+    }
+
+    // Redis에서 사용자 온라인 상태 제거
+    await this.redisService.setRemove('online_users', userId.toString());
+    await this.redisService.delete(`user_current_room:${userId}`);
+  }
+
+  async markAllRoomMessagesAsRead(roomId: number, userId: number): Promise<number> {
+    // 접근 권한 확인
+    const canAccess = await this.canAccessRoom(roomId, userId);
+    if (!canAccess) {
+      throw new ForbiddenException('메시지를 읽을 권한이 없습니다.');
+    }
+
+    const result = await this.chatMessageRepository
+      .createQueryBuilder()
+      .update(ChatMessage)
+      .set({ is_read: true, read_at: new Date() })
+      .where('room_id = :roomId', { roomId })
+      .andWhere('sender_id != :userId', { userId })
+      .andWhere('is_read = false')
+      .execute();
+
+    // Redis의 읽지 않은 메시지 수 초기화
+    await this.redisService.delete(`unread_count:${userId}:${roomId}`);
+
+    return result.affected || 0;
+  }
+
+  async getChatRoomByCounseling(counselingId: number, userId: number): Promise<ChatRoomResponseDto | null> {
+    const room = await this.chatRoomRepository
+      .createQueryBuilder('room')
+      .leftJoinAndSelect('room.counseling', 'counseling')
+      .where('room.counseling_id = :counselingId', { counselingId })
+      .getOne();
+
+    if (!room) {
+      return null;
+    }
+
+    // 접근 권한 확인
+    const canAccess = await this.canAccessRoom(room.id, userId);
+    if (!canAccess) {
+      throw new ForbiddenException('채팅방에 접근할 권한이 없습니다.');
+    }
+
+    return plainToClass(ChatRoomResponseDto, room, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  async getChatSessionInfo(roomId: number, userId: number): Promise<any> {
+    // 접근 권한 확인
+    const canAccess = await this.canAccessRoom(roomId, userId);
+    if (!canAccess) {
+      throw new ForbiddenException('채팅 세션에 접근할 권한이 없습니다.');
+    }
+
+    const room = await this.chatRoomRepository.findOne({
+      where: { id: roomId },
+      relations: ['counseling', 'counseling.user', 'counseling.expert']
+    });
+
+    if (!room) {
+      throw new NotFoundException('채팅방을 찾을 수 없습니다.');
+    }
+
+    const counseling = room.counseling;
+    if (!counseling) {
+      throw new NotFoundException('상담 정보를 찾을 수 없습니다.');
+    }
+
+    return {
+      roomId: room.id,
+      counselingId: counseling.id,
+      clientId: counseling.user_id,
+      clientName: counseling.user?.name,
+      expertId: counseling.expert_id,
+      expertName: counseling.expert?.name,
+      status: room.status,
+      startTime: room.created_at,
+      endTime: room.status === ChatRoomStatus.INACTIVE ? room.updated_at : null,
+      duration: 60, // 기본 60분
+      reason: counseling.reason
+    };
+  }
+
+  async getUserUnreadMessageCount(userId: number): Promise<number> {
+    // 사용자가 참여한 모든 채팅방의 읽지 않은 메시지 수 합계
+    const rooms = await this.chatRoomRepository
+      .createQueryBuilder('room')
+      .where(':userId = ANY(room.participants)', { userId })
+      .andWhere('room.status = :status', { status: ChatRoomStatus.ACTIVE })
+      .select(['room.id'])
+      .getMany();
+
+    let totalUnreadCount = 0;
+
+    for (const room of rooms) {
+      const unreadCount = await this.getUnreadCount(userId, room.id);
+      totalUnreadCount += unreadCount;
+    }
+
+    return totalUnreadCount;
+  }
+
+  async uploadFile(
+    roomId: number,
+    file: Express.Multer.File,
+    userId: number
+  ): Promise<{ fileUrl: string; fileName: string; fileSize: number }> {
+    // 접근 권한 확인
+    const canAccess = await this.canAccessRoom(roomId, userId);
+    if (!canAccess) {
+      throw new ForbiddenException('채팅방에 파일을 업로드할 권한이 없습니다.');
+    }
+
+    if (!file) {
+      throw new BadRequestException('업로드할 파일이 없습니다.');
+    }
+
+    // 파일 크기 제한 (10MB)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new BadRequestException('파일 크기가 10MB를 초과합니다.');
+    }
+
+    // 파일 확장자 검증
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.pdf', '.doc', '.docx', '.txt'];
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    
+    if (!allowedExtensions.includes(fileExtension)) {
+      throw new BadRequestException('허용되지 않는 파일 형식입니다.');
+    }
+
+    // 파일 저장 경로 설정
+    const uploadDir = path.join(process.cwd(), 'uploads', 'chat', roomId.toString());
+    
+    // 디렉토리 생성
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // 고유한 파일명 생성
+    const uniqueFileName = `${uuidv4()}${fileExtension}`;
+    const filePath = path.join(uploadDir, uniqueFileName);
+    const fileUrl = `/uploads/chat/${roomId}/${uniqueFileName}`;
+
+    // 파일 저장
+    fs.writeFileSync(filePath, file.buffer);
+
+    return {
+      fileUrl,
+      fileName: file.originalname,
+      fileSize: file.size
+    };
   }
 }

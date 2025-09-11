@@ -3,10 +3,11 @@ import { Transform } from 'class-transformer';
 import { VacationType, VacationStatus } from '../../entities/expert-vacation.entity';
 
 export class CreateVacationDto {
+  @IsOptional()
   @IsNumber({}, { message: '전문가 ID는 숫자여야 합니다.' })
   @IsPositive({ message: '전문가 ID는 양수여야 합니다.' })
-  @Transform(({ value }) => parseInt(value))
-  expert_id: number;
+  @Transform(({ value }) => value ? parseInt(value) : undefined)
+  expert_id?: number;
 
   @IsDateString({}, { message: '시작일은 유효한 날짜 형식이어야 합니다.' })
   start_date: string;
@@ -34,8 +35,8 @@ export class UpdateVacationStatusDto {
 
 export class VacationQueryDto {
   @IsOptional()
-  @IsNumber({}, { message: '전문가 ID는 숫자여야 합니다.' })
   @Transform(({ value }) => value ? parseInt(value) : undefined)
+  @IsNumber({}, { message: '전문가 ID는 숫자여야 합니다.' })
   expert_id?: number;
 
   @IsOptional()
@@ -55,12 +56,10 @@ export class VacationQueryDto {
   end_date?: string;
 
   @IsOptional()
-  @IsNumber({}, { message: '페이지는 숫자여야 합니다.' })
   @Transform(({ value }) => value ? parseInt(value) : 1)
   page?: number = 1;
 
   @IsOptional()
-  @IsNumber({}, { message: '제한 수는 숫자여야 합니다.' })
   @Transform(({ value }) => value ? parseInt(value) : 20)
   limit?: number = 20;
 }

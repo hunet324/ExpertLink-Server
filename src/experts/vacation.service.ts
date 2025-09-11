@@ -70,8 +70,8 @@ export class VacationService {
     return this.mapToResponseDto(savedVacation, expertProfile.user);
   }
 
-  async getVacations(queryDto: VacationQueryDto): Promise<VacationListResponseDto> {
-    LoggerUtil.log('INFO', 'Fetching vacations', { queryDto });
+  async getVacations(queryDto: VacationQueryDto, currentUser?: any): Promise<VacationListResponseDto> {
+    LoggerUtil.log('INFO', 'Fetching vacations', { queryDto, userId: currentUser?.id });
 
     const { expert_id, status, vacation_type, start_date, end_date, page, limit } = queryDto;
     
@@ -80,6 +80,15 @@ export class VacationService {
       .leftJoinAndSelect('expert.user', 'expertUser')
       .leftJoinAndSelect('vacation.approver', 'approver')
       .orderBy('vacation.created_at', 'DESC');
+
+    // 센터 범위 검증 (center_manager인 경우에만 적용)
+    if (currentUser?.userType === 'center_manager' && currentUser?.centerId) {
+      queryBuilder.andWhere('expert.center_id = :centerId', { centerId: currentUser.centerId });
+      LoggerUtil.log('INFO', 'Applied center scope filter', { 
+        centerId: currentUser.centerId, 
+        userType: currentUser.userType 
+      });
+    }
 
     // 필터 적용
     if (expert_id) {
@@ -118,8 +127,8 @@ export class VacationService {
     };
   }
 
-  async getVacationById(id: number): Promise<VacationResponseDto> {
-    LoggerUtil.log('INFO', 'Fetching vacation by ID', { id });
+  async getVacationById(id: number, currentUser?: any): Promise<VacationResponseDto> {
+    LoggerUtil.log('INFO', 'Fetching vacation by ID', { id, userId: currentUser?.id });
 
     const vacation = await this.vacationRepository.findOne({
       where: { id },
@@ -130,15 +139,29 @@ export class VacationService {
       throw new NotFoundException('휴가 신청을 찾을 수 없습니다.');
     }
 
+    // 센터 범위 검증
+    if (currentUser?.userType === 'center_manager' && currentUser?.centerId) {
+      if (vacation.expert?.center_id !== currentUser.centerId) {
+        LoggerUtil.error('Center scope violation - vacation access denied', {
+          userId: currentUser.id,
+          userCenterId: currentUser.centerId,
+          expertCenterId: vacation.expert?.center_id,
+          vacationId: id
+        });
+        throw new ForbiddenException('다른 센터의 휴가 신청에 접근할 수 없습니다.');
+      }
+    }
+
     return this.mapToResponseDto(vacation);
   }
 
   async updateVacationStatus(
     id: number, 
     updateStatusDto: UpdateVacationStatusDto, 
-    approverId: number
+    approverId: number,
+    currentUser?: any
   ): Promise<VacationResponseDto> {
-    LoggerUtil.log('INFO', 'Updating vacation status', { id, updateStatusDto, approverId });
+    LoggerUtil.log('INFO', 'Updating vacation status', { id, updateStatusDto, approverId, userId: currentUser?.id });
 
     const vacation = await this.vacationRepository.findOne({
       where: { id },
@@ -147,6 +170,19 @@ export class VacationService {
 
     if (!vacation) {
       throw new NotFoundException('휴가 신청을 찾을 수 없습니다.');
+    }
+
+    // 센터 범위 검증
+    if (currentUser?.userType === 'center_manager' && currentUser?.centerId) {
+      if (vacation.expert?.center_id !== currentUser.centerId) {
+        LoggerUtil.error('Center scope violation - vacation status update denied', {
+          userId: currentUser.id,
+          userCenterId: currentUser.centerId,
+          expertCenterId: vacation.expert?.center_id,
+          vacationId: id
+        });
+        throw new ForbiddenException('다른 센터의 휴가 상태를 변경할 수 없습니다.');
+      }
     }
 
     if (vacation.status !== VacationStatus.PENDING) {
@@ -250,15 +286,63 @@ export class VacationService {
       expert_email: expert?.email || vacation.expert?.user?.email || '',
       approved_by: vacation.approved_by,
       approver_name: approver?.name || vacation.approver?.name || '',
-      start_date: vacation.start_date ? vacation.start_date.toISOString().split('T')[0] : '',
-      end_date: vacation.end_date ? vacation.end_date.toISOString().split('T')[0] : '',
+      start_date: this.formatDate(vacation.start_date),
+      end_date: this.formatDate(vacation.end_date),
       vacation_type: vacation.vacation_type,
       status: vacation.status,
       reason: vacation.reason,
       rejection_reason: vacation.rejection_reason || '',
-      approved_at: vacation.approved_at ? vacation.approved_at.toISOString() : '',
-      created_at: vacation.created_at ? vacation.created_at.toISOString() : '',
-      updated_at: vacation.updated_at ? vacation.updated_at.toISOString() : '',
+      approved_at: this.formatDateTime(vacation.approved_at),
+      created_at: this.formatDateTime(vacation.created_at),
+      updated_at: this.formatDateTime(vacation.updated_at),
     };
+  }
+
+  private formatDate(date: any): string {
+    if (!date) return '';
+    
+    // 이미 문자열인 경우 (YYYY-MM-DD 형태로 저장된 경우)
+    if (typeof date === 'string') {
+      // ISO 날짜 형태인지 확인하고 날짜 부분만 추출
+      if (date.includes('T')) {
+        return date.split('T')[0];
+      }
+      return date;
+    }
+    
+    // Date 객체인 경우
+    if (date instanceof Date) {
+      return date.toISOString().split('T')[0];
+    }
+    
+    // 다른 형태인 경우 Date로 변환 시도
+    try {
+      return new Date(date).toISOString().split('T')[0];
+    } catch (error) {
+      LoggerUtil.error('날짜 포맷팅 오류', { date, error: error.message });
+      return '';
+    }
+  }
+
+  private formatDateTime(date: any): string {
+    if (!date) return '';
+    
+    // 이미 문자열인 경우
+    if (typeof date === 'string') {
+      return date;
+    }
+    
+    // Date 객체인 경우
+    if (date instanceof Date) {
+      return date.toISOString();
+    }
+    
+    // 다른 형태인 경우 Date로 변환 시도
+    try {
+      return new Date(date).toISOString();
+    } catch (error) {
+      LoggerUtil.error('날짜시간 포맷팅 오류', { date, error: error.message });
+      return '';
+    }
   }
 }

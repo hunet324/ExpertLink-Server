@@ -9,4 +9,9 @@ export class UpdateCounselingStatusDto {
   @IsString()
   @MaxLength(500)
   rejection_reason?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
 }

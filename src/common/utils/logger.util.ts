@@ -13,14 +13,14 @@ export class LoggerUtil {
     }
   }
 
-  private static shouldLog(level: 'INFO' | 'ERROR' | 'DEBUG'): boolean {
-    const levels = { DEBUG: 0, INFO: 1, ERROR: 2 };
+  private static shouldLog(level: 'INFO' | 'ERROR' | 'DEBUG' | 'WARN'): boolean {
+    const levels = { DEBUG: 0, INFO: 1, WARN: 1, ERROR: 2 };
     const currentLevel = levels[this.logLevel as keyof typeof levels] || 1;
     const messageLevel = levels[level];
     return messageLevel >= currentLevel;
   }
 
-  static log(level: 'INFO' | 'ERROR' | 'DEBUG', message: string, data?: any) {
+  static log(level: 'INFO' | 'ERROR' | 'DEBUG' | 'WARN', message: string, data?: any) {
     if (!this.shouldLog(level)) {
       return;
     }
@@ -42,9 +42,11 @@ export class LoggerUtil {
         console.log(JSON.stringify(data, null, 2));
       }
     } else {
-      // 운영 환경에서는 ERROR만 콘솔 출력
+      // 운영 환경에서는 ERROR와 WARN만 콘솔 출력
       if (level === 'ERROR') {
         console.error(`[${timestamp}] ${level}: ${message}`);
+      } else if (level === 'WARN') {
+        console.warn(`[${timestamp}] ${level}: ${message}`);
       }
     }
 
@@ -67,5 +69,9 @@ export class LoggerUtil {
 
   static debug(message: string, data?: any) {
     this.log('DEBUG', message, data);
+  }
+
+  static warn(message: string, data?: any) {
+    this.log('WARN', message, data);
   }
 }

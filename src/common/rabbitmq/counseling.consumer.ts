@@ -3,7 +3,7 @@ import { RabbitMQService } from './rabbitmq.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Counseling, CounselingStatus } from '../../entities/counseling.entity';
-import { Schedule, ScheduleStatus } from '../../entities/schedule.entity';
+// import { Schedule, ScheduleStatus } from '../../entities/schedule.entity'; // Removed - schedules migrated to counselings
 import { 
   CounselingEventType, 
   CounselingBookingRequestedEvent,
@@ -23,8 +23,6 @@ export class CounselingConsumer implements OnModuleInit {
     private readonly chatService: ChatService,
     @InjectRepository(Counseling)
     private counselingRepository: Repository<Counseling>,
-    @InjectRepository(Schedule)
-    private scheduleRepository: Repository<Schedule>,
   ) {}
 
   async onModuleInit() {
@@ -97,28 +95,14 @@ export class CounselingConsumer implements OnModuleInit {
         throw new Error('해당 시간대에 다른 예약이 진행 중입니다.');
       }
 
-      // 일정 상태 확인 및 업데이트
-      const schedule = await this.scheduleRepository.findOne({
-        where: { id: event.scheduleId }
-      });
+      // 통합 상담 시스템에서는 counseling 엔티티로 일정 관리
+      // 이전 로직은 새로운 통합 시스템에서 대체됨
+      this.logger.log('예약 요청 이벤트 처리 - 통합 상담 시스템에서 처리');
 
-      if (!schedule) {
-        throw new Error('일정을 찾을 수 없습니다.');
-      }
-
-      if (schedule.status !== ScheduleStatus.AVAILABLE) {
-        throw new Error('이미 예약된 일정입니다.');
-      }
-
-      // 일정을 예약됨으로 변경
-      schedule.status = ScheduleStatus.BOOKED;
-      await this.scheduleRepository.save(schedule);
-
-      // 상담 정보 업데이트
+      // 상담 정보 업데이트 (통합 상담 시스템)
       await this.counselingRepository.update(event.counselingId, {
         expert_id: event.expertId,
-        schedule_id: event.scheduleId,
-        appointment_date: new Date(`${schedule.schedule_date}T${schedule.start_time}`),
+        appointment_date: new Date(),
       });
 
       // 알림 이벤트 발행
@@ -129,7 +113,7 @@ export class CounselingConsumer implements OnModuleInit {
           userId: event.userId,
           expertId: event.expertId,
           scheduleId: event.scheduleId,
-          appointmentDate: new Date(`${schedule.schedule_date}T${schedule.start_time}`),
+          appointmentDate: new Date(), // 통합 상담 시스템에서 자동 설정
           approvedAt: new Date(),
         } as CounselingBookingApprovedEvent
       );
@@ -174,11 +158,9 @@ export class CounselingConsumer implements OnModuleInit {
       status: CounselingStatus.REJECTED,
     });
 
-    // 일정을 다시 사용 가능으로 변경
+    // 통합 상담 시스템에서는 슬롯 해제 처리가 자동으로 됨
     if (event.scheduleId) {
-      await this.scheduleRepository.update(event.scheduleId, {
-        status: ScheduleStatus.AVAILABLE,
-      });
+      this.logger.log('상담 거절 - 슬롯 해제는 통합 상담 시스템에서 처리');
     }
 
     // 사용자에게 알림

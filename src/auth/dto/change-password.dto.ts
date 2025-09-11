@@ -8,7 +8,7 @@ export class ChangePasswordDto {
   })
   @IsNotEmpty({ message: '현재 비밀번호를 입력해주세요.' })
   @IsString()
-  currentPassword: string;
+  current_password: string;
 
   @ApiProperty({
     description: '새 비밀번호',
@@ -24,5 +24,5 @@ export class ChangePasswordDto {
       message: '비밀번호는 대문자, 소문자, 숫자, 특수문자를 각각 1개 이상 포함해야 합니다.'
     }
   )
-  newPassword: string;
+  new_password: string;
 }

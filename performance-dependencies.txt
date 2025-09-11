@@ -1,0 +1,14 @@
+# Phase 1,2,4 최적화를 위해 추가해야 할 의존성들
+
+# Phase 4: 모니터링 (Sentry)
+npm install @sentry/node @sentry/profiling-node
+
+# Phase 2: 압축 (성능 향상)
+npm install compression
+npm install @types/compression --save-dev
+
+# 추가 개발 의존성 (타입 정의)
+npm install @types/sentry__node --save-dev
+
+# 설치 명령어 (한 번에 실행)
+npm install @sentry/node @sentry/profiling-node compression @types/compression @types/sentry__node --save
